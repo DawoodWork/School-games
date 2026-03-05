@@ -1,0 +1,13 @@
+{
+  "name": "ashen-lineage",
+  "version": "1.0.0",
+  "description": "2D pixel-art souls-like RPG",
+  "scripts": {
+    "deploy": "vercel --prod"
+  },
+  "private": true,
+  "dependencies": {
+    "@supabase/supabase-js": "^2.98.0",
+    "vercel": "^50.27.1"
+  }
+}

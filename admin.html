@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Console — Ashen Lineage</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0D0D0D;
+  --panel: #1A1A2E;
+  --panel-light: #22223A;
+  --accent: #C0392B;
+  --accent-hover: #E74C3C;
+  --border: #2A2A4A;
+  --text: #D0D0D0;
+  --text-dim: #6A6A8A;
+  --text-bright: #F0F0F0;
+  --input-bg: #0F0F1E;
+  --success: #27AE60;
+  --warn: #F39C12;
+  --mono: 'Courier New', 'Lucida Console', monospace;
+}
+
+html, body { height: 100%; font-family: var(--mono); background: var(--bg); color: var(--text); font-size: 13px; }
+
+/* ── Layout ──────────────────────────────────────────────── */
+.shell { display: flex; flex-direction: column; height: 100vh; }
+
+.top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px; height: 48px; min-height: 48px;
+  background: var(--panel); border-bottom: 2px solid var(--accent);
+}
+.top-bar .title { color: var(--accent); font-size: 13px; letter-spacing: 2px; font-weight: bold; }
+.top-bar .admin-user { color: var(--text-dim); font-size: 11px; }
+.top-bar .admin-user span { color: var(--success); }
+.top-bar .btn-logout {
+  background: none; border: 1px solid var(--accent); color: var(--accent);
+  font-family: var(--mono); font-size: 11px; padding: 4px 12px; cursor: pointer;
+}
+.top-bar .btn-logout:hover { background: var(--accent); color: #fff; }
+
+.main-area { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+.sidebar {
+  width: 220px; min-width: 220px; background: var(--panel);
+  border-right: 1px solid var(--border); display: flex; flex-direction: column;
+  padding: 8px 0; overflow-y: auto;
+}
+.sidebar button {
+  display: block; width: 100%; text-align: left; padding: 12px 16px;
+  font-family: var(--mono); font-size: 11px; color: var(--text-dim);
+  background: none; border: none; cursor: pointer; border-left: 3px solid transparent;
+  transition: all .12s;
+}
+.sidebar button:hover { color: var(--text); background: rgba(192,57,43,.06); }
+.sidebar button.active {
+  color: var(--accent); border-left-color: var(--accent);
+  background: rgba(192,57,43,.1); font-weight: bold;
+}
+
+/* ── Content ─────────────────────────────────────────────── */
+.content { flex: 1; overflow-y: auto; padding: 24px; }
+.panel { display: none; }
+.panel.active { display: block; }
+
+h2 { color: var(--accent); font-size: 14px; letter-spacing: 2px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+
+/* ── Form elements ───────────────────────────────────────── */
+label { display: block; font-size: 10px; color: var(--text-dim); margin-bottom: 4px; letter-spacing: 1px; text-transform: uppercase; }
+input[type="text"], input[type="number"], select, textarea {
+  width: 100%; padding: 10px; font-family: var(--mono); font-size: 12px;
+  background: var(--input-bg); color: var(--text); border: 1px solid var(--border);
+  margin-bottom: 14px; outline: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+textarea { min-height: 80px; resize: vertical; }
+
+.btn {
+  padding: 10px 20px; font-family: var(--mono); font-size: 12px;
+  border: none; cursor: pointer; letter-spacing: 1px; transition: background .12s;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-danger { background: #7B241C; color: #fff; }
+.btn-danger:hover { background: #922B21; }
+.btn-secondary { background: var(--panel-light); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--border); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-row { display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.form-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.form-grid.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+.form-full { grid-column: 1 / -1; }
+
+/* ── Character card ──────────────────────────────────────── */
+.char-card {
+  background: var(--panel); border: 1px solid var(--border); padding: 16px; margin-bottom: 16px;
+}
+.char-card h3 { color: var(--text-bright); font-size: 13px; margin-bottom: 10px; }
+.char-card .stat-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px;
+}
+.char-card .stat { font-size: 11px; }
+.char-card .stat .lbl { color: var(--text-dim); }
+.char-card .stat .val { color: var(--text-bright); }
+
+/* ── Table ───────────────────────────────────────────────── */
+.admin-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.admin-table th {
+  text-align: left; padding: 8px 10px; background: var(--panel-light);
+  color: var(--text-dim); font-size: 10px; letter-spacing: 1px; border-bottom: 1px solid var(--border);
+}
+.admin-table td { padding: 8px 10px; border-bottom: 1px solid rgba(42,42,74,.4); vertical-align: top; }
+.admin-table tr:hover td { background: rgba(192,57,43,.04); }
+.admin-table .payload-cell { max-width: 320px; word-break: break-all; color: var(--text-dim); font-size: 10px; }
+
+/* ── Status toast ────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+  font-family: var(--mono); font-size: 12px; z-index: 999; transition: opacity .3s;
+  opacity: 0; pointer-events: none;
+}
+.toast.show { opacity: 1; pointer-events: auto; }
+.toast.success { background: var(--success); color: #fff; }
+.toast.error { background: var(--accent); color: #fff; }
+
+/* ── Range slider ────────────────────────────────────────── */
+input[type="range"] { width: 100%; margin-bottom: 14px; accent-color: var(--accent); }
+.range-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-bottom: 2px; }
+.range-label .range-val { color: var(--text-bright); font-weight: bold; }
+
+/* ── Search result list ──────────────────────────────────── */
+.search-results { margin-top: 12px; }
+.search-results .result-item {
+  padding: 10px 12px; background: var(--panel-light); border: 1px solid var(--border);
+  margin-bottom: 6px; cursor: pointer; transition: border-color .12s;
+}
+.search-results .result-item:hover { border-color: var(--accent); }
+.search-results .result-item .name { color: var(--text-bright); font-size: 12px; }
+.search-results .result-item .meta { color: var(--text-dim); font-size: 10px; margin-top: 2px; }
+
+/* ── Online list ─────────────────────────────────────────── */
+.online-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-top: 12px;
+}
+.online-card {
+  background: var(--panel-light); border: 1px solid var(--border); padding: 10px 12px; font-size: 11px;
+}
+.online-card .dot { display: inline-block; width: 6px; height: 6px; background: var(--success); border-radius: 50%; margin-right: 6px; }
+
+.section-break { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+.inventory-list { margin-top: 10px; }
+.inv-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 10px; background: var(--panel-light); border: 1px solid var(--border); margin-bottom: 4px; font-size: 11px;
+}
+.inv-item .inv-name { color: var(--text-bright); }
+.inv-item .inv-meta { color: var(--text-dim); font-size: 10px; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <div class="top-bar">
+    <div class="title">ASHEN LINEAGE — ADMIN CONSOLE</div>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div class="admin-user">logged in as <span id="admin-name">...</span></div>
+      <button class="btn-logout" id="btn-logout">LOGOUT</button>
+    </div>
+  </div>
+
+  <div class="main-area">
+    <nav class="sidebar" id="sidebar">
+      <button class="active" data-panel="lookup">▸ PLAYER LOOKUP</button>
+      <button data-panel="items">▸ GIVE / TAKE ITEMS</button>
+      <button data-panel="class">▸ CLASS &amp; ABILITIES</button>
+      <button data-panel="stats">▸ STATS &amp; ALIGNMENT</button>
+      <button data-panel="teleport">▸ TELEPORTATION</button>
+      <button data-panel="heirlooms">▸ HEIRLOOMS</button>
+      <button data-panel="log">▸ ADMIN LOG</button>
+      <button data-panel="overview">▸ SERVER OVERVIEW</button>
+    </nav>
+
+    <div class="content">
+
+      <!-- ═══ PLAYER LOOKUP ═══════════════════════════════════ -->
+      <div class="panel active" id="panel-lookup">
+        <h2>// PLAYER LOOKUP</h2>
+        <div class="form-grid">
+          <div>
+            <label>Search by Username</label>
+            <input type="text" id="search-username" placeholder="username...">
+          </div>
+          <div>
+            <label>Search by Character Name</label>
+            <input type="text" id="search-charname" placeholder="character name...">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-search">SEARCH</button>
+        <div class="search-results" id="search-results"></div>
+        <div id="char-detail"></div>
+      </div>
+
+      <!-- ═══ GIVE / TAKE ITEMS ═══════════════════════════════ -->
+      <div class="panel" id="panel-items">
+        <h2>// GIVE / TAKE ITEMS</h2>
+        <label>Target Character (search first in Player Lookup)</label>
+        <input type="text" id="item-char-id" placeholder="character id (UUID)">
+        <div class="form-grid">
+          <div>
+            <label>Item Type</label>
+            <select id="item-type">
+              <option value="weapon">weapon</option>
+              <option value="armor">armor</option>
+              <option value="consumable">consumable</option>
+              <option value="heirloom">heirloom</option>
+              <option value="spell_scroll">spell_scroll</option>
+            </select>
+          </div>
+          <div>
+            <label>Item Name</label>
+            <input type="text" id="item-name" placeholder="Blade of the Forsaken">
+          </div>
+          <div>
+            <label>Quantity</label>
+            <input type="number" id="item-qty" value="1" min="1">
+          </div>
+        </div>
+        <label>Item Data (JSON)</label>
+        <textarea id="item-data" placeholder='{"damage":12,"element":"fire"}'>{}</textarea>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-give-item">GIVE ITEM</button>
+          <button class="btn btn-danger" id="btn-remove-item">REMOVE ITEM (by ID below)</button>
+        </div>
+        <hr class="section-break">
+        <label>Inventory Item ID (for removal)</label>
+        <input type="text" id="remove-item-id" placeholder="inventory row UUID">
+      </div>
+
+      <!-- ═══ CLASS & ABILITIES ═══════════════════════════════ -->
+      <div class="panel" id="panel-class">
+        <h2>// CLASS &amp; ABILITIES</h2>
+        <label>Target Character ID</label>
+        <input type="text" id="class-char-id" placeholder="character id (UUID)">
+        <div class="form-grid">
+          <div>
+            <label>Class</label>
+            <select id="class-name">
+              <option value="warrior">Warrior</option>
+              <option value="mage">Mage</option>
+              <option value="rogue">Rogue</option>
+              <option value="cleric">Cleric</option>
+              <option value="ranger">Ranger</option>
+              <option value="necromancer">Necromancer</option>
+              <option value="paladin">Paladin</option>
+              <option value="warlock">Warlock</option>
+            </select>
+          </div>
+          <div>
+            <label>Class Tier</label>
+            <input type="number" id="class-tier" value="1" min="1" max="5">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-set-class">SET CLASS</button>
+        <hr class="section-break">
+        <label>Ability ID</label>
+        <input type="text" id="ability-id" placeholder="ability identifier">
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btn-give-ability">GIVE ABILITY (stub)</button>
+          <button class="btn btn-danger" id="btn-remove-ability">REMOVE ABILITY (stub)</button>
+        </div>
+      </div>
+
+      <!-- ═══ STATS & ALIGNMENT ═══════════════════════════════ -->
+      <div class="panel" id="panel-stats">
+        <h2>// STATS &amp; ALIGNMENT</h2>
+        <label>Target Character ID</label>
+        <input type="text" id="stats-char-id" placeholder="character id (UUID)">
+
+        <div class="form-grid">
+          <div>
+            <div class="range-label"><span>HP</span><span class="range-val" id="val-hp">50</span></div>
+            <input type="range" id="stat-hp" min="0" max="999" value="50">
+          </div>
+          <div>
+            <div class="range-label"><span>MAX HP</span><span class="range-val" id="val-max-hp">100</span></div>
+            <input type="range" id="stat-max-hp" min="1" max="999" value="100">
+          </div>
+          <div>
+            <div class="range-label"><span>MANA</span><span class="range-val" id="val-mana">50</span></div>
+            <input type="range" id="stat-mana" min="0" max="999" value="50">
+          </div>
+          <div>
+            <div class="range-label"><span>MAX MANA</span><span class="range-val" id="val-max-mana">100</span></div>
+            <input type="range" id="stat-max-mana" min="1" max="999" value="100">
+          </div>
+          <div>
+            <div class="range-label"><span>STAMINA</span><span class="range-val" id="val-stamina">100</span></div>
+            <input type="range" id="stat-stamina" min="0" max="999" value="100">
+          </div>
+          <div>
+            <div class="range-label"><span>SILVER</span><span class="range-val" id="val-silver">0</span></div>
+            <input type="range" id="stat-silver" min="0" max="99999" value="0">
+          </div>
+          <div>
+            <div class="range-label"><span>VALU</span><span class="range-val" id="val-valu">0</span></div>
+            <input type="range" id="stat-valu" min="0" max="99999" value="0">
+          </div>
+          <div>
+            <div class="range-label"><span>INSIGHT</span><span class="range-val" id="val-insight">0</span></div>
+            <input type="range" id="stat-insight" min="0" max="999" value="0">
+          </div>
+        </div>
+
+        <div class="range-label" style="margin-top:8px"><span>ALIGNMENT</span><span class="range-val" id="val-alignment">0 (Neutral)</span></div>
+        <input type="range" id="stat-alignment" min="-400" max="400" value="0">
+
+        <div class="form-grid" style="margin-top:4px">
+          <div>
+            <div class="range-label"><span>LIVES</span><span class="range-val" id="val-lives">3</span></div>
+            <input type="range" id="stat-lives" min="0" max="3" value="3">
+          </div>
+          <div>
+            <div class="range-label"><span>INSANITY STAGE</span><span class="range-val" id="val-insanity">0</span></div>
+            <input type="range" id="stat-insanity" min="0" max="5" value="0">
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="btn-apply-stats" style="margin-top:8px">APPLY ALL</button>
+      </div>
+
+      <!-- ═══ TELEPORTATION ═══════════════════════════════════ -->
+      <div class="panel" id="panel-teleport">
+        <h2>// TELEPORTATION</h2>
+        <label>Target Character ID</label>
+        <input type="text" id="tp-char-id" placeholder="character id (UUID)">
+        <div class="form-grid cols-3">
+          <div>
+            <label>X</label>
+            <input type="number" id="tp-x" value="0">
+          </div>
+          <div>
+            <label>Y</label>
+            <input type="number" id="tp-y" value="0">
+          </div>
+          <div>
+            <label>Zone</label>
+            <input type="text" id="tp-zone" placeholder="zone_id">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-teleport">TELEPORT TO COORDS</button>
+        <hr class="section-break">
+        <label>Teleport to Another Player's Position</label>
+        <input type="text" id="tp-target-player" placeholder="target character id (copy from lookup)">
+        <button class="btn btn-secondary" id="btn-tp-to-player">TELEPORT TO PLAYER</button>
+      </div>
+
+      <!-- ═══ HEIRLOOMS ═══════════════════════════════════════ -->
+      <div class="panel" id="panel-heirlooms">
+        <h2>// HEIRLOOMS</h2>
+        <label>Target Character ID</label>
+        <input type="text" id="heir-char-id" placeholder="character id (UUID)">
+        <label>Heirloom Name / ID</label>
+        <input type="text" id="heir-name" placeholder="Ashen Crown">
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-give-heirloom">GIVE HEIRLOOM</button>
+          <button class="btn btn-danger" id="btn-remove-heirloom">REMOVE HEIRLOOM</button>
+        </div>
+      </div>
+
+      <!-- ═══ ADMIN LOG ═══════════════════════════════════════ -->
+      <div class="panel" id="panel-log">
+        <h2>// ADMIN LOG</h2>
+        <div class="form-grid" style="margin-bottom:12px">
+          <div>
+            <label>Filter by Action</label>
+            <input type="text" id="log-filter-action" placeholder="e.g. give_item">
+          </div>
+          <div>
+            <label>Filter by Admin</label>
+            <input type="text" id="log-filter-admin" placeholder="username">
+          </div>
+        </div>
+        <button class="btn btn-secondary" id="btn-refresh-log" style="margin-bottom:16px">REFRESH LOG</button>
+        <div style="overflow-x:auto">
+          <table class="admin-table" id="log-table">
+            <thead><tr><th>TIMESTAMP</th><th>ADMIN</th><th>TARGET</th><th>ACTION</th><th>PAYLOAD</th></tr></thead>
+            <tbody id="log-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ═══ SERVER OVERVIEW ═════════════════════════════════ -->
+      <div class="panel" id="panel-overview">
+        <h2>// SERVER OVERVIEW</h2>
+        <button class="btn btn-secondary" id="btn-refresh-overview" style="margin-bottom:16px">REFRESH</button>
+        <h3 style="color:var(--text-dim);font-size:11px;margin-bottom:8px">ONLINE PLAYERS</h3>
+        <div id="overview-online" class="online-grid"></div>
+        <hr class="section-break">
+        <h3 style="color:var(--text-dim);font-size:11px;margin-bottom:8px">RECENT WORLD EVENTS</h3>
+        <div style="overflow-x:auto">
+          <table class="admin-table" id="events-table">
+            <thead><tr><th>TIME</th><th>TYPE</th><th>PLANE</th><th>PAYLOAD</th></tr></thead>
+            <tbody id="events-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- .content -->
+  </div><!-- .main-area -->
+</div><!-- .shell -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+window.SUPABASE_URL = 'https://nkqqsfnqfucevoxuoeof.supabase.co';
+window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5rcXFzZm5xZnVjZXZveHVvZW9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzM4NDYsImV4cCI6MjA4ODI0OTg0Nn0.qsTfzqnlCG3edeU_-URdgoEQ9cB45xdpxt7L7RA0FgM';
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<script>
+(function () {
+  const SH = window.SupabaseHelper;
+
+  // ── Auth guard ──────────────────────────────────────────
+  let session = null;
+  let adminProfile = null;
+
+  async function boot() {
+    const { data: sess } = await SH.getSession();
+    if (!sess) { window.location.href = 'index.html'; return; }
+    session = sess;
+
+    const { data: prof } = await SH.getProfile(sess.user.id);
+    if (!prof || !prof.is_admin) {
+      alert('Access Denied');
+      window.location.href = 'game.html';
+      return;
+    }
+    adminProfile = prof;
+    document.getElementById('admin-name').textContent = prof.username || sess.user.email;
+    loadLog();
+  }
+  boot();
+
+  // ── Logout ──────────────────────────────────────────────
+  document.getElementById('btn-logout').addEventListener('click', async () => {
+    await SH.signOut();
+    window.location.href = 'index.html';
+  });
+
+  // ── Toast ───────────────────────────────────────────────
+  let toastTimer = null;
+  function toast(msg, type) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast show ' + (type || 'success');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.className = 'toast'; }, 3500);
+  }
+
+  // ── Sidebar navigation ─────────────────────────────────
+  const sidebar = document.getElementById('sidebar');
+  sidebar.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-panel]');
+    if (!btn) return;
+    sidebar.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-' + btn.dataset.panel).classList.add('active');
+  });
+
+  // ── Admin API caller ───────────────────────────────────
+  async function adminCall(action, payload) {
+    if (!session) { toast('No session', 'error'); return null; }
+    const res = await fetch('/api/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ action, ...payload })
+    });
+    const json = await res.json();
+    if (!res.ok || json.error) {
+      toast(json.error || 'Request failed', 'error');
+      return null;
+    }
+    toast(action + ' ✓', 'success');
+    return json.data;
+  }
+
+  // ── Alignment label helper ─────────────────────────────
+  function alignLabel(v) {
+    v = parseInt(v, 10);
+    if (v <= -300) return v + ' (Abyssal Evil)';
+    if (v <= -150) return v + ' (Evil)';
+    if (v <= -50)  return v + ' (Dark)';
+    if (v < 50)    return v + ' (Neutral)';
+    if (v < 150)   return v + ' (Good)';
+    if (v < 300)   return v + ' (Holy)';
+    return v + ' (Celestial)';
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // 1. PLAYER LOOKUP
+  // ══════════════════════════════════════════════════════════
+  document.getElementById('btn-search').addEventListener('click', async () => {
+    const uname = document.getElementById('search-username').value.trim();
+    const cname = document.getElementById('search-charname').value.trim();
+    const resultsEl = document.getElementById('search-results');
+    const detailEl = document.getElementById('char-detail');
+    resultsEl.innerHTML = ''; detailEl.innerHTML = '';
+
+    let combined = [];
+
+    if (uname) {
+      const { data } = await SH.searchByUsername(uname);
+      if (data) data.forEach(p => {
+        (p.characters || []).forEach(c => {
+          combined.push({ ...c, _username: p.username });
+        });
+      });
+    }
+    if (cname) {
+      const { data } = await SH.searchPlayers(cname);
+      if (data) data.forEach(c => {
+        if (!combined.find(x => x.id === c.id)) {
+          combined.push({ ...c, _username: c.profiles?.username || '?' });
+        }
+      });
+    }
+
+    if (!combined.length) { resultsEl.innerHTML = '<p style="color:var(--text-dim);margin-top:12px">No results.</p>'; return; }
+
+    combined.forEach(c => {
+      const div = document.createElement('div');
+      div.className = 'result-item';
+      div.innerHTML = '<div class="name">' + esc(c.name || 'Unnamed') + '</div>'
+        + '<div class="meta">user: ' + esc(c._username) + ' | id: ' + c.id + '</div>';
+      div.addEventListener('click', () => showCharDetail(c));
+      resultsEl.appendChild(div);
+    });
+  });
+
+  async function showCharDetail(c) {
+    const detailEl = document.getElementById('char-detail');
+    const { data: inv } = await SH.loadInventory(c.id);
+
+    const fields = [
+      ['ID', c.id], ['Name', c.name], ['Race', c.race], ['Class', c.current_class],
+      ['Alignment', c.alignment], ['Lives', c.lives_remaining], ['Plane', c.current_plane],
+      ['Zone', c.current_zone], ['Position', c.pos_x + ', ' + c.pos_y],
+      ['HP', c.hp + '/' + c.max_hp], ['Mana', c.mana + '/' + c.max_mana],
+      ['Stamina', c.stamina], ['Silver', c.silver], ['Valu', c.valu], ['Insight', c.insight],
+      ['Insanity', c.insanity_stage], ['Online', c.is_online ? 'YES' : 'no'],
+      ['Last Seen', c.last_seen ? new Date(c.last_seen).toLocaleString() : '—'],
+    ];
+
+    let html = '<div class="char-card"><h3>▸ ' + esc(c.name || 'Unnamed') + '</h3><div class="stat-grid">';
+    fields.forEach(([lbl, val]) => {
+      html += '<div class="stat"><span class="lbl">' + lbl + ':</span> <span class="val">' + esc(String(val ?? '—')) + '</span></div>';
+    });
+    html += '</div>';
+
+    if (inv && inv.length) {
+      html += '<hr class="section-break"><h3 style="font-size:11px;color:var(--text-dim)">INVENTORY (' + inv.length + ')</h3><div class="inventory-list">';
+      inv.forEach(item => {
+        html += '<div class="inv-item"><span class="inv-name">' + esc(item.item_name || item.item_type) + ' x' + (item.quantity || 1)
+          + '</span><span class="inv-meta">' + item.item_type + ' | ' + item.id + '</span></div>';
+      });
+      html += '</div>';
+    }
+
+    html += '</div>';
+    detailEl.innerHTML = html;
+
+    propagateCharId(c.id);
+  }
+
+  function propagateCharId(id) {
+    ['item-char-id', 'class-char-id', 'stats-char-id', 'tp-char-id', 'heir-char-id'].forEach(elId => {
+      document.getElementById(elId).value = id;
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // 2. GIVE / TAKE ITEMS
+  // ══════════════════════════════════════════════════════════
+  document.getElementById('btn-give-item').addEventListener('click', async () => {
+    const charId = document.getElementById('item-char-id').value.trim();
+    if (!charId) { toast('No character ID', 'error'); return; }
+    let itemData;
+    try { itemData = JSON.parse(document.getElementById('item-data').value); } catch { toast('Invalid JSON in item data', 'error'); return; }
+    await adminCall('give_item', {
+      charId,
+      item: {
+        item_type: document.getElementById('item-type').value,
+        item_name: document.getElementById('item-name').value.trim(),
+        quantity: parseInt(document.getElementById('item-qty').value, 10) || 1,
+        item_data: itemData
+      }
+    });
+  });
+
+  document.getElementById('btn-remove-item').addEventListener('click', async () => {
+    const itemId = document.getElementById('remove-item-id').value.trim();
+    if (!itemId) { toast('No inventory item ID', 'error'); return; }
+    await adminCall('remove_item', { itemId });
+  });
+
+  // ══════════════════════════════════════════════════════════
+  // 3. CLASS & ABILITIES
+  // ══════════════════════════════════════════════════════════
+  document.getElementById('btn-set-class').addEventListener('click', async () => {
+    const charId = document.getElementById('class-char-id').value.trim();
+    if (!charId) { toast('No character ID', 'error'); return; }
+    await adminCall('set_class', {
+      charId,
+      className: document.getElementById('class-name').value,
+      classTier: parseInt(document.getElementById('class-tier').value, 10)
+    });
+  });
+
+  document.getElementById('btn-give-ability').addEventListener('click', async () => {
+    const charId = document.getElementById('class-char-id').value.trim();
+    if (!charId) { toast('No character ID', 'error'); return; }
+    await adminCall('give_ability', { charId, abilityId: document.getElementById('ability-id').value.trim() });
+  });
+
+  document.getElementById('btn-remove-ability').addEventListener('click', async () => {
+    const charId = document.getElementById('class-char-id').value.trim();
+    if (!charId) { toast('No character ID', 'error'); return; }
+    await adminCall('remove_ability', { charId, abilityId: document.getElementById('ability-id').value.trim() });
+  });
+
+  // ══════════════════════════════════════════════════════════
+  // 4. STATS & ALIGNMENT
+  // ══════════════════════════════════════════════════════════
+  const statSliders = ['hp','max-hp','mana','max-mana','stamina','silver','valu','insight','lives','insanity'];
+  statSliders.forEach(key => {
+    const slider = document.getElementById('stat-' + key);
+    const valEl = document.getElementById('val-' + key);
+    if (!slider || !valEl) return;
+    slider.addEventListener('input', () => { valEl.textContent = slider.value; });
+  });
+
+  const alignSlider = document.getElementById('stat-alignment');
+  const alignVal = document.getElementById('val-alignment');
+  alignSlider.addEventListener('input', () => { alignVal.textContent = alignLabel(alignSlider.value); });
+
+  document.getElementById('btn-apply-stats').addEventListener('click', async () => {
+    const charId = document.getElementById('stats-char-id').value.trim();
+    if (!charId) { toast('No character ID', 'error'); return; }
+
+    await adminCall('set_stats', {
+      charId,
+      stats: {
+        hp: parseInt(document.getElementById('stat-hp').value, 10),
+        max_hp: parseInt(document.getElementById('stat-max-hp').value, 10),
+        mana: parseInt(document.getElementById('stat-mana').value, 10),
+        max_mana: parseInt(document.getElementById('stat-max-mana').value, 10),
+        stamina: parseInt(document.getElementById('stat-stamina').value, 10),
+        silver: parseInt(document.getElementById('stat-silver').value, 10),
+        valu: parseInt(document.getElementById('stat-valu').value, 10),
+        insight: parseInt(document.getElementById('stat-insight').value, 10),
+      }
+    });
+
+    await adminCall('set_alignment', { charId, value: parseInt(alignSlider.value, 10) });
+    await adminCall('set_lives', { charId, lives: parseInt(document.getElementById('stat-lives').value, 10) });
+    await adminCall('set_insanity', { charId, stage: parseInt(document.getElementById('stat-insanity').value, 10) });
+  });
+
+  // ══════════════════════════════════════════════════════════
+  // 5. TELEPORTATION
+  // ══════════════════════════════════════════════════════════
+  document.getElementById('btn-teleport').addEventListener('click', async () => {
+    const charId = document.getElementById('tp-char-id').value.trim();
+    if (!charId) { toast('No character ID', 'error'); return; }
+    await adminCall('teleport', {
+      charId,
+      x: parseInt(document.getElementById('tp-x').value, 10),
+      y: parseInt(document.getElementById('tp-y').value, 10),
+      zone: document.getElementById('tp-zone').value.trim()
+    });
+  });
+
+  document.getElementById('btn-tp-to-player').addEventListener('click', async () => {
+    const charId = document.getElementById('tp-char-id').value.trim();
+    const targetId = document.getElementById('tp-target-player').value.trim();
+    if (!charId || !targetId) { toast('Need both character IDs', 'error'); return; }
+
+    const sb = SH.getClient();
+    const { data: target, error } = await sb.from('characters').select('pos_x, pos_y, current_zone').eq('id', targetId).single();
+    if (error || !target) { toast('Target not found', 'error'); return; }
+
+    await adminCall('teleport', { charId, x: target.pos_x, y: target.pos_y, zone: target.current_zone });
+  });
+
+  // ══════════════════════════════════════════════════════════
+  // 6. HEIRLOOMS
+  // ══════════════════════════════════════════════════════════
+  document.getElementById('btn-give-heirloom').addEventListener('click', async () => {
+    const charId = document.getElementById('heir-char-id').value.trim();
+    const name = document.getElementById('heir-name').value.trim();
+    if (!charId || !name) { toast('Fill in character ID and heirloom', 'error'); return; }
+    await adminCall('give_heirloom', { charId, heirloom: name });
+  });
+
+  document.getElementById('btn-remove-heirloom').addEventListener('click', async () => {
+    const charId = document.getElementById('heir-char-id').value.trim();
+    const name = document.getElementById('heir-name').value.trim();
+    if (!charId || !name) { toast('Fill in character ID and heirloom', 'error'); return; }
+    await adminCall('remove_heirloom', { charId, heirloom: name });
+  });
+
+  // ══════════════════════════════════════════════════════════
+  // 7. ADMIN LOG
+  // ══════════════════════════════════════════════════════════
+  async function loadLog() {
+    const { data: logs } = await SH.getAdminLog(200);
+    renderLog(logs || []);
+  }
+
+  function renderLog(logs) {
+    const filterAction = document.getElementById('log-filter-action').value.trim().toLowerCase();
+    const filterAdmin = document.getElementById('log-filter-admin').value.trim().toLowerCase();
+
+    let filtered = logs;
+    if (filterAction) filtered = filtered.filter(l => l.action && l.action.toLowerCase().includes(filterAction));
+    if (filterAdmin) filtered = filtered.filter(l => {
+      const name = l.profiles?.username || '';
+      return name.toLowerCase().includes(filterAdmin);
+    });
+
+    const tbody = document.getElementById('log-body');
+    tbody.innerHTML = '';
+    filtered.forEach(l => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + new Date(l.created_at).toLocaleString() + '</td>'
+        + '<td>' + esc(l.profiles?.username || l.admin_id) + '</td>'
+        + '<td style="font-size:10px">' + esc(l.target_character_id || '—') + '</td>'
+        + '<td>' + esc(l.action) + '</td>'
+        + '<td class="payload-cell">' + esc(JSON.stringify(l.payload)) + '</td>';
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('btn-refresh-log').addEventListener('click', loadLog);
+  document.getElementById('log-filter-action').addEventListener('input', loadLog);
+  document.getElementById('log-filter-admin').addEventListener('input', loadLog);
+
+  // ══════════════════════════════════════════════════════════
+  // 8. SERVER OVERVIEW
+  // ══════════════════════════════════════════════════════════
+  async function loadOverview() {
+    const { data: players } = await SH.getOnlinePlayers();
+    const { data: events } = await SH.getRecentWorldEvents(50);
+
+    const onlineEl = document.getElementById('overview-online');
+    onlineEl.innerHTML = '';
+
+    if (players && players.length) {
+      const planes = {};
+      players.forEach(p => {
+        const pl = p.current_plane || 'unknown';
+        if (!planes[pl]) planes[pl] = [];
+        planes[pl].push(p);
+      });
+
+      Object.keys(planes).sort().forEach(plane => {
+        const header = document.createElement('div');
+        header.style.cssText = 'grid-column:1/-1;color:var(--text-dim);font-size:10px;margin-top:8px;letter-spacing:1px;';
+        header.textContent = '[ ' + plane.toUpperCase() + ' ] — ' + planes[plane].length + ' online';
+        onlineEl.appendChild(header);
+
+        planes[plane].forEach(p => {
+          const card = document.createElement('div');
+          card.className = 'online-card';
+          card.innerHTML = '<span class="dot"></span>' + esc(p.profiles?.username || '?')
+            + ' — <span style="color:var(--text-dim)">' + esc(p.name || '?') + '</span>';
+          onlineEl.appendChild(card);
+        });
+      });
+    } else {
+      onlineEl.innerHTML = '<p style="color:var(--text-dim)">No players online.</p>';
+    }
+
+    const evBody = document.getElementById('events-body');
+    evBody.innerHTML = '';
+    (events || []).forEach(ev => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + new Date(ev.created_at).toLocaleString() + '</td>'
+        + '<td>' + esc(ev.event_type) + '</td>'
+        + '<td>' + esc(ev.plane || '—') + '</td>'
+        + '<td class="payload-cell">' + esc(JSON.stringify(ev.payload)) + '</td>';
+      evBody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('btn-refresh-overview').addEventListener('click', loadOverview);
+
+  sidebar.querySelector('[data-panel="overview"]').addEventListener('click', loadOverview);
+
+  // ── Utility ─────────────────────────────────────────────
+  function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+})();
+</script>
+</body>
+</html>

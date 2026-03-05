@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+<title>Ashen Lineage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #1A1A2E;
+  --card: #16213E;
+  --card-border: #0F3460;
+  --accent: #C0392B;
+  --accent-hover: #E74C3C;
+  --text: #E0E0E0;
+  --text-dim: #8888AA;
+  --input-bg: #0D1B2A;
+  --input-border: #2A2A4A;
+  --error-bg: #3B0A0A;
+  --error-border: #C0392B;
+  --pixel-font: 'Press Start 2P', monospace;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--pixel-font);
+  background: var(--bg);
+  color: var(--text);
+}
+
+#ember-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.auth-wrapper {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  min-height: 100dvh;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--card);
+  padding: 40px 32px 32px;
+  box-shadow:
+    0 0 0 2px var(--card-border),
+    0 0 0 4px var(--bg),
+    0 0 0 6px var(--card-border),
+    0 4px 24px rgba(0,0,0,.6);
+  image-rendering: pixelated;
+}
+
+.game-title {
+  text-align: center;
+  font-size: clamp(18px, 5vw, 28px);
+  color: var(--accent);
+  letter-spacing: 2px;
+  line-height: 1.4;
+  text-shadow:
+    2px 2px 0 #1A1A2E,
+    0 0 12px rgba(192, 57, 43, .4);
+}
+
+.tagline {
+  text-align: center;
+  font-size: clamp(8px, 2.2vw, 11px);
+  color: var(--text-dim);
+  margin-top: 12px;
+  letter-spacing: 1px;
+}
+
+.tabs {
+  display: flex;
+  margin-top: 28px;
+  gap: 0;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 12px 0;
+  font-family: var(--pixel-font);
+  font-size: 11px;
+  background: var(--input-bg);
+  color: var(--text-dim);
+  border: 2px solid var(--input-border);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+
+.tab-btn:first-child { border-right: none; }
+
+.tab-btn[aria-selected="true"] {
+  background: var(--card-border);
+  color: var(--text);
+  border-color: var(--card-border);
+}
+
+.tab-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.form-panel { display: none; margin-top: 24px; }
+.form-panel.active { display: block; }
+
+label {
+  display: block;
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  letter-spacing: 1px;
+}
+
+input[type="email"],
+input[type="text"],
+input[type="password"] {
+  width: 100%;
+  padding: 14px 12px;
+  font-family: var(--pixel-font);
+  font-size: 11px;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 2px solid var(--input-border);
+  outline: none;
+  margin-bottom: 16px;
+  transition: border-color .15s;
+  min-height: 48px;
+}
+
+input:focus {
+  border-color: var(--accent);
+}
+
+.submit-btn {
+  width: 100%;
+  padding: 16px;
+  font-family: var(--pixel-font);
+  font-size: 13px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: background .15s;
+  min-height: 52px;
+  margin-top: 4px;
+}
+
+.submit-btn:hover:not(:disabled) { background: var(--accent-hover); }
+.submit-btn:disabled { opacity: .6; cursor: not-allowed; }
+
+.submit-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.error-banner {
+  display: none;
+  padding: 12px;
+  font-size: 9px;
+  line-height: 1.6;
+  color: #FF6B6B;
+  background: var(--error-bg);
+  border: 2px solid var(--error-border);
+  margin-bottom: 16px;
+  word-break: break-word;
+  box-shadow:
+    inset 0 0 0 1px rgba(192,57,43,.2),
+    0 0 0 2px var(--bg),
+    0 0 0 3px var(--error-border);
+}
+
+.error-banner.visible { display: block; }
+
+@media (max-width: 480px) {
+  .auth-card {
+    max-width: 100%;
+    padding: 28px 18px 24px;
+    box-shadow:
+      0 0 0 2px var(--card-border),
+      0 4px 16px rgba(0,0,0,.5);
+  }
+}
+</style>
+</head>
+<body>
+
+<canvas id="ember-canvas"></canvas>
+
+<div class="auth-wrapper">
+  <div class="auth-card">
+    <h1 class="game-title">ASHEN LINEAGE</h1>
+    <p class="tagline">Die. Inherit. Evolve. Repeat.</p>
+
+    <div class="tabs" role="tablist">
+      <button class="tab-btn" role="tab" aria-selected="true" data-tab="signin">SIGN IN</button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-tab="register">REGISTER</button>
+    </div>
+
+    <!-- Sign In -->
+    <div id="panel-signin" class="form-panel active" role="tabpanel">
+      <div id="err-signin" class="error-banner" role="alert"></div>
+      <form id="form-signin" autocomplete="on" novalidate>
+        <label for="si-email">EMAIL</label>
+        <input id="si-email" type="email" name="email" autocomplete="email" required>
+
+        <label for="si-pass">PASSWORD</label>
+        <input id="si-pass" type="password" name="password" autocomplete="current-password" required>
+
+        <button type="submit" class="submit-btn" id="btn-signin">ENTER THE RIFT</button>
+      </form>
+    </div>
+
+    <!-- Register -->
+    <div id="panel-register" class="form-panel" role="tabpanel">
+      <div id="err-register" class="error-banner" role="alert"></div>
+      <form id="form-register" autocomplete="on" novalidate>
+        <label for="reg-email">EMAIL</label>
+        <input id="reg-email" type="email" name="email" autocomplete="email" required>
+
+        <label for="reg-user">USERNAME</label>
+        <input id="reg-user" type="text" name="username" autocomplete="username" required>
+
+        <label for="reg-pass">PASSWORD</label>
+        <input id="reg-pass" type="password" name="new-password" autocomplete="new-password" required>
+
+        <label for="reg-pass2">CONFIRM PASSWORD</label>
+        <input id="reg-pass2" type="password" name="confirm-password" autocomplete="new-password" required>
+
+        <button type="submit" class="submit-btn" id="btn-register">FORGE YOUR LINEAGE</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+window.SUPABASE_URL = 'https://nkqqsfnqfucevoxuoeof.supabase.co';
+window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5rcXFzZm5xZnVjZXZveHVvZW9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzM4NDYsImV4cCI6MjA4ODI0OTg0Nn0.qsTfzqnlCG3edeU_-URdgoEQ9cB45xdpxt7L7RA0FgM';
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<script>
+(function () {
+  // ── Ember particle canvas ─────────────────────────────────
+  const canvas = document.getElementById('ember-canvas');
+  const ctx = canvas.getContext('2d');
+  let particles = [];
+  const PARTICLE_COUNT = 60;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function spawnParticle() {
+    return {
+      x: Math.random() * canvas.width,
+      y: canvas.height + Math.random() * 40,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: -(0.3 + Math.random() * 0.7),
+      size: 1 + Math.random() * 2,
+      life: 0,
+      maxLife: 200 + Math.random() * 300,
+      hue: 10 + Math.random() * 25
+    };
+  }
+
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const p = spawnParticle();
+    p.y = Math.random() * canvas.height;
+    p.life = Math.random() * p.maxLife;
+    particles.push(p);
+  }
+
+  function tickParticles() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vx += (Math.random() - 0.5) * 0.04;
+      p.life++;
+
+      const progress = p.life / p.maxLife;
+      const alpha = progress < 0.1 ? progress * 10 : 1 - progress;
+
+      ctx.fillStyle = `hsla(${p.hue}, 90%, ${50 + progress * 15}%, ${alpha * 0.7})`;
+      ctx.fillRect(Math.round(p.x), Math.round(p.y), Math.ceil(p.size), Math.ceil(p.size));
+
+      if (p.life >= p.maxLife) {
+        particles[i] = spawnParticle();
+      }
+    }
+    requestAnimationFrame(tickParticles);
+  }
+  requestAnimationFrame(tickParticles);
+
+  // ── DOM refs ──────────────────────────────────────────────
+  const tabs = document.querySelectorAll('.tab-btn');
+  const panelSignin = document.getElementById('panel-signin');
+  const panelRegister = document.getElementById('panel-register');
+
+  const formSignin = document.getElementById('form-signin');
+  const formRegister = document.getElementById('form-register');
+  const btnSignin = document.getElementById('btn-signin');
+  const btnRegister = document.getElementById('btn-register');
+  const errSignin = document.getElementById('err-signin');
+  const errRegister = document.getElementById('err-register');
+
+  const signinLabel = 'ENTER THE RIFT';
+  const registerLabel = 'FORGE YOUR LINEAGE';
+
+  // ── Tab switching ─────────────────────────────────────────
+  tabs.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const target = btn.dataset.tab;
+      tabs.forEach(function (b) { b.setAttribute('aria-selected', 'false'); });
+      btn.setAttribute('aria-selected', 'true');
+
+      panelSignin.classList.toggle('active', target === 'signin');
+      panelRegister.classList.toggle('active', target === 'register');
+      hideError(errSignin);
+      hideError(errRegister);
+    });
+  });
+
+  // ── Error helpers ─────────────────────────────────────────
+  function showError(el, msg) {
+    el.textContent = msg;
+    el.classList.add('visible');
+  }
+  function hideError(el) {
+    el.textContent = '';
+    el.classList.remove('visible');
+  }
+
+  // ── Loading state helpers ─────────────────────────────────
+  let dotInterval = null;
+  function setLoading(btn, loading) {
+    btn.disabled = loading;
+    if (loading) {
+      let dots = 0;
+      btn.textContent = '.';
+      dotInterval = setInterval(function () {
+        dots = (dots + 1) % 4;
+        btn.textContent = '.'.repeat(dots || 1);
+      }, 300);
+    } else {
+      clearInterval(dotInterval);
+      dotInterval = null;
+    }
+  }
+
+  function redirect() {
+    window.location.href = 'game.html';
+  }
+
+  // ── Auto-redirect if session exists ───────────────────────
+  window.SupabaseHelper.getSession().then(function (result) {
+    if (result.data) redirect();
+  });
+
+  // ── Sign In ───────────────────────────────────────────────
+  formSignin.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    hideError(errSignin);
+
+    const email = document.getElementById('si-email').value.trim();
+    const password = document.getElementById('si-pass').value;
+
+    if (!email || !password) {
+      showError(errSignin, 'All fields are required.');
+      return;
+    }
+
+    setLoading(btnSignin, true);
+    const { error } = await window.SupabaseHelper.signIn(email, password);
+    setLoading(btnSignin, false);
+    btnSignin.textContent = signinLabel;
+
+    if (error) {
+      showError(errSignin, error.message || 'Sign in failed.');
+    } else {
+      redirect();
+    }
+  });
+
+  // ── Register ──────────────────────────────────────────────
+  formRegister.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    hideError(errRegister);
+
+    const email = document.getElementById('reg-email').value.trim();
+    const username = document.getElementById('reg-user').value.trim();
+    const password = document.getElementById('reg-pass').value;
+    const confirm = document.getElementById('reg-pass2').value;
+
+    if (!email || !username || !password || !confirm) {
+      showError(errRegister, 'All fields are required.');
+      return;
+    }
+    if (password !== confirm) {
+      showError(errRegister, 'Passwords do not match.');
+      return;
+    }
+    if (password.length < 6) {
+      showError(errRegister, 'Password must be at least 6 characters.');
+      return;
+    }
+
+    setLoading(btnRegister, true);
+    const { error } = await window.SupabaseHelper.signUp(email, password, username);
+    setLoading(btnRegister, false);
+    btnRegister.textContent = registerLabel;
+
+    if (error) {
+      showError(errRegister, error.message || 'Registration failed.');
+    } else {
+      redirect();
+    }
+  });
+})();
+</script>
+</body>
+</html>
