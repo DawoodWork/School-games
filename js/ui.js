@@ -26,6 +26,7 @@
   var activeMenu = null; // 'inventory' | 'charsheet' | 'map' | 'pause' | null
   var inventorySlot = -1;
   var hoverSlot = -1;
+  var inventoryItems = [];
   var notifications = [];
   var insanityTimers = { flickerCooldown: 0, pulsePhase: 0, wobblePhase: 0 };
   var mobileJoystick = { active: false, cx: 0, cy: 0, tx: 0, ty: 0, radius: 50 };
@@ -33,6 +34,14 @@
   var npcDialogue = { active: false, npc: null, player: null, onAction: null, optionRects: [], closeRect: null };
   var jailState = { active: false, timer: 0 };
   var specter = { x: 0, y: 0, active: false, alpha: 1, catchTimer: 0, catchActive: false, vignetteIntensity: 0 };
+
+  var ITEM_DISPLAY = {
+    iron_sword:     { letter: 'S', color: '#aaaacc', label: 'Iron Sword' },
+    steel_shield:   { letter: 'H', color: '#8888aa', label: 'Steel Shield' },
+    leather_armor:  { letter: 'A', color: '#aa8866', label: 'Leather Armor' },
+    health_potion:  { letter: '+', color: '#44cc44', label: 'Health Potion' },
+    mana_potion:    { letter: 'M', color: '#4488ff', label: 'Mana Potion' },
+  };
 
   // ── Init ─────────────────────────────────────────────────────────
 
@@ -58,6 +67,7 @@
     _drawCurrencies(ctx, vw);
     _drawStatusEffects(ctx, vh);
     _drawAlignmentMeter(ctx, vw, vh);
+    _drawSpellHotbar(ctx, vw, vh);
 
     if (isMobile) {
       _drawMobileHUD(ctx, vw, vh);
@@ -210,7 +220,12 @@
   // ── Active Status Effects ────────────────────────────────────────
 
   function _drawStatusEffects(ctx, vh) {
-    if (!player.statusEffects || player.statusEffects.length === 0) return;
+    if (!player.statusEffects) return;
+
+    var statusKeys = typeof player.statusEffects === 'object' && !Array.isArray(player.statusEffects)
+      ? Object.keys(player.statusEffects) : [];
+
+    if (statusKeys.length === 0) return;
 
     var icons = {
       onFire:      { letter: 'F', color: '#ff4400' },
@@ -220,32 +235,26 @@
       frostbite:   { letter: 'X', color: '#aaccff' },
       manaLocked:  { letter: 'M', color: '#444488' },
       blinded:     { letter: 'B', color: '#888888' },
-      poisoned:    { letter: 'P', color: '#44aa22' },
+      poison:      { letter: 'P', color: '#44aa22' },
       anemia:      { letter: 'A', color: '#aa8888' },
     };
 
-    var seen = {};
     var drawn = 0;
     var startY = vh - 20;
 
-    for (var i = 0; i < player.statusEffects.length; i++) {
-      var se = player.statusEffects[i];
-      var key = se.type;
-      if (seen[key]) continue;
-      seen[key] = true;
+    for (var i = 0; i < statusKeys.length; i++) {
+      var key = statusKeys[i];
 
       var info = icons[key];
       if (!info) continue;
 
       var ix = 8 + drawn * 16;
 
-      // Circle bg
       ctx.fillStyle = info.color;
       ctx.beginPath();
       ctx.arc(ix + 5, startY + 5, 5, 0, Math.PI * 2);
       ctx.fill();
 
-      // Letter
       ctx.fillStyle = '#ffffff';
       ctx.font = '4px ' + FONT;
       ctx.textAlign = 'center';
@@ -257,7 +266,9 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillStyle = '#cccccc';
-      ctx.fillText(Math.ceil(se.remaining) + 's', ix + 5, startY + 12);
+      var statusData = player.statusEffects[key];
+      var remaining = statusData && statusData.timer ? Math.ceil(statusData.timer) : '';
+      ctx.fillText(remaining + 's', ix + 5, startY + 12);
 
       drawn++;
     }
@@ -383,6 +394,47 @@
     ctx.globalAlpha = 1;
   }
 
+  // ── Spell Hotbar ─────────────────────────────────────────────────
+
+  function _drawSpellHotbar(ctx, vw, vh) {
+    if (!player || !player.knownSpells || player.knownSpells.length === 0) return;
+
+    var spells = player.knownSpells;
+    var slotW = 20;
+    var slotH = 20;
+    var gap = 2;
+    var totalW = spells.length * (slotW + gap) - gap;
+    var ox = (vw - totalW) / 2;
+    var oy = vh - slotH - 6;
+
+    for (var i = 0; i < spells.length; i++) {
+      var spellId = spells[i];
+      var spell = (typeof Combat !== 'undefined' && Combat.SPELLS) ? Combat.SPELLS[spellId] : null;
+      if (!spell) continue;
+
+      var sx = ox + i * (slotW + gap);
+      var isSelected = i === player.selectedSpell;
+      var canCast = player.mana >= spell.cost;
+
+      ctx.fillStyle = isSelected ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.6)';
+      ctx.fillRect(sx, oy, slotW, slotH);
+      ctx.strokeStyle = isSelected ? spell.color : '#444444';
+      ctx.lineWidth = isSelected ? 1 : 0.5;
+      ctx.strokeRect(sx, oy, slotW, slotH);
+
+      ctx.fillStyle = canCast ? spell.color : '#555555';
+      ctx.font = '7px ' + FONT;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(spell.label.charAt(0), sx + slotW / 2, oy + slotH / 2);
+
+      ctx.fillStyle = '#888888';
+      ctx.font = '3px ' + FONT;
+      ctx.textBaseline = 'top';
+      ctx.fillText(String(i + 1), sx + 2, oy + 1);
+    }
+  }
+
   // ── Inventory ────────────────────────────────────────────────────
 
   function _drawInventory(ctx, vw, vh) {
@@ -391,18 +443,15 @@
     var ox = (vw - totalW) / 2;
     var oy = (vh - totalH) / 2;
 
-    // Backdrop
     ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-    ctx.fillRect(ox - 4, oy - 14, totalW + 8, totalH + 20);
+    ctx.fillRect(ox - 4, oy - 14, totalW + 8, totalH + 28);
 
-    // Title
     ctx.font = '5px ' + FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillStyle = '#cccccc';
     ctx.fillText('INVENTORY', vw / 2, oy - 4);
 
-    // Grid
     for (var r = 0; r < INV_ROWS; r++) {
       for (var c = 0; c < INV_COLS; c++) {
         var idx = r * INV_COLS + c;
@@ -411,6 +460,7 @@
 
         var isSelected = idx === inventorySlot;
         var isHovered = idx === hoverSlot;
+        var item = inventoryItems[idx] || null;
 
         ctx.strokeStyle = isSelected ? '#ccaa33' : isHovered ? '#888888' : '#444444';
         ctx.lineWidth = isSelected ? 1 : 0.5;
@@ -418,8 +468,39 @@
 
         ctx.fillStyle = isSelected ? 'rgba(204,170,51,0.15)' : 'rgba(30,30,30,0.6)';
         ctx.fillRect(sx + 1, sy + 1, ITEM_SLOT - 3, ITEM_SLOT - 3);
+
+        if (item) {
+          var disp = ITEM_DISPLAY[item.item_name] || { letter: '?', color: '#aaaaaa', label: item.item_name };
+          ctx.fillStyle = disp.color;
+          ctx.font = '10px ' + FONT;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(disp.letter, sx + ITEM_SLOT / 2, sy + ITEM_SLOT / 2 - 2);
+
+          if (item.quantity > 1) {
+            ctx.font = '4px ' + FONT;
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'bottom';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText('x' + item.quantity, sx + ITEM_SLOT - 4, sy + ITEM_SLOT - 3);
+          }
+        }
       }
     }
+
+    if (inventorySlot >= 0 && inventoryItems[inventorySlot]) {
+      var sel = inventoryItems[inventorySlot];
+      var selDisp = ITEM_DISPLAY[sel.item_name] || { label: sel.item_name };
+      ctx.font = '4px ' + FONT;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = '#dddddd';
+      ctx.fillText(selDisp.label + (sel.item_type ? ' (' + sel.item_type + ')' : ''), vw / 2, oy + totalH + 4);
+    }
+  }
+
+  function loadInventoryItems(items) {
+    inventoryItems = items || [];
   }
 
   // ── Character Sheet ──────────────────────────────────────────────
@@ -843,6 +924,29 @@
     return false;
   }
 
+  function _learnSpell(playerRef, spellId) {
+    if (!playerRef.knownSpells) playerRef.knownSpells = [];
+    if (playerRef.knownSpells.indexOf(spellId) === -1) {
+      playerRef.knownSpells.push(spellId);
+      if (typeof SupabaseHelper !== 'undefined' && SupabaseHelper.updateCharacterStats) {
+        SupabaseHelper.updateCharacterStats(playerRef.id, { known_spells: playerRef.knownSpells });
+      }
+    }
+  }
+
+  function _buyItem(playerRef, itemType, itemName, itemData) {
+    if (typeof SupabaseHelper !== 'undefined' && SupabaseHelper.addInventoryItem) {
+      SupabaseHelper.addInventoryItem({
+        character_id: playerRef.id, item_type: itemType,
+        item_name: itemName, quantity: 1, item_data: itemData
+      }).then(function () {
+        SupabaseHelper.loadInventory(playerRef.id).then(function (result) {
+          if (result.data) loadInventoryItems(result.data);
+        });
+      });
+    }
+  }
+
   function handleNPCAction(actionId, playerRef) {
     var costs = {
       heal_broken_arm: 50, heal_broken_leg: 50, heal_slash_wound: 30, heal_cataracts: 80,
@@ -882,28 +986,32 @@
       if (playerRef.removeInjury) playerRef.removeInjury('cataracts');
       showNotification('Cataracts cured!', '#44ff44', 3);
     } else if (actionId === 'buy_iron_sword') {
-      if (typeof SupabaseHelper !== 'undefined' && SupabaseHelper.addInventoryItem) {
-        SupabaseHelper.addInventoryItem(playerRef, 'iron_sword');
-      }
+      _buyItem(playerRef, 'weapon', 'iron_sword', { damage: 15, slot: 'main_hand' });
       showNotification('Iron Sword purchased!', '#aaaaff', 3);
     } else if (actionId === 'buy_steel_shield') {
-      if (typeof SupabaseHelper !== 'undefined' && SupabaseHelper.addInventoryItem) {
-        SupabaseHelper.addInventoryItem(playerRef, 'steel_shield');
-      }
+      _buyItem(playerRef, 'armor', 'steel_shield', { defense: 10, slot: 'off_hand' });
       showNotification('Steel Shield purchased!', '#aaaaff', 3);
     } else if (actionId === 'buy_leather_armor') {
-      if (typeof SupabaseHelper !== 'undefined' && SupabaseHelper.addInventoryItem) {
-        SupabaseHelper.addInventoryItem(playerRef, 'leather_armor');
-      }
+      _buyItem(playerRef, 'armor', 'leather_armor', { defense: 5, slot: 'chest' });
       showNotification('Leather Armor purchased!', '#aaaaff', 3);
     } else if (actionId === 'learn_ignis') {
+      _learnSpell(playerRef, 'ignis');
       showNotification('Spell learned: Ignis!', '#ff8844', 3);
     } else if (actionId === 'learn_gelidus') {
+      _learnSpell(playerRef, 'gelidus');
       showNotification('Spell learned: Gelidus!', '#44aaff', 3);
     } else if (actionId === 'learn_armis') {
+      _learnSpell(playerRef, 'armis');
       showNotification('Spell learned: Armis!', '#cccc44', 3);
     }
   }
+
+  var NPC_SPRITE_MAP = {
+    Doctor:       'npc_doctor',
+    Blacksmith:   'npc_blacksmith',
+    ClassTrainer: 'npc_trainer',
+    Guard:        'npc_guard',
+  };
 
   function renderNPCMarkers(ctx, camera, npcsList) {
     if (!npcsList) return;
@@ -916,18 +1024,34 @@
       var px = npc.x * 16 - camera.x;
       var py = npc.y * 16 - camera.y;
 
-      ctx.fillStyle = data.color;
-      ctx.fillRect(px, py, 16, 16);
+      var spriteKey = NPC_SPRITE_MAP[npc.type];
+      var sprite = spriteKey && typeof GameEngine !== 'undefined' && GameEngine.spriteLoader
+        ? GameEngine.spriteLoader.getSprite(spriteKey) : null;
 
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '8px ' + FONT;
+      if (sprite) {
+        ctx.drawImage(sprite, 0, 0, 32, 32, px - 8, py - 16, 32, 32);
+      } else {
+        ctx.fillStyle = data.color;
+        ctx.fillRect(px, py, 16, 16);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '8px ' + FONT;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(data.letter, px + 8, py + 8);
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(px, py, 16, 16);
+      }
+
+      // NPC name above head
+      ctx.font = '4px ' + FONT;
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(data.letter, px + 8, py + 8);
-
+      ctx.textBaseline = 'bottom';
       ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 0.5;
-      ctx.strokeRect(px, py, 16, 16);
+      ctx.lineWidth = 2;
+      ctx.strokeText(npc.type, px + 8, py - (sprite ? 18 : 2));
+      ctx.fillStyle = data.color;
+      ctx.fillText(npc.type, px + 8, py - (sprite ? 18 : 2));
     }
   }
 
@@ -1293,5 +1417,7 @@
     renderSpecter:          renderSpecter,
     isSpecterActive:        isSpecterActive,
     isJailed:               function () { return jailState.active; },
+    isNPCDialogueOpen:      function () { return npcDialogue.active; },
+    loadInventoryItems:     loadInventoryItems,
   };
 })();

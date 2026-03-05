@@ -18,6 +18,17 @@
     npc_doctor:     'assets/sprites/npc_doctor.png',
     npc_blacksmith: 'assets/sprites/npc_blacksmith.png',
     npc_trainer:    'assets/sprites/npc_trainer.png',
+    npc_guard:      'assets/sprites/npc_guard.png',
+    race_gaian:     'assets/sprites/race_gaian.png',
+    race_morvid:    'assets/sprites/race_morvid.png',
+    race_vampire:   'assets/sprites/race_vampire.png',
+    race_azael:     'assets/sprites/race_azael.png',
+    race_human:     'assets/sprites/race_human.png',
+    race_dwarf:     'assets/sprites/race_dwarf.png',
+    tileset_grass_stone: 'assets/tilesets/grass_stone.png',
+    tileset_grass_mud:   'assets/tilesets/grass_mud.png',
+    tileset_grass_snow:  'assets/tilesets/grass_snow.png',
+    tileset_dungeon:     'assets/tilesets/dungeon.png',
   };
 
   // ── Shared state ───────────────────────────────────────────────
@@ -190,12 +201,33 @@
     Chat.init(player);
     Combat.initCombat(player);
 
+    SupabaseHelper.loadInventory(player.id).then(function (result) {
+      if (result.data) {
+        UI.loadInventoryItems(result.data);
+      }
+    });
+
     setLoadProgress(60, 'Loading sprites...');
     loadSprites(function () {
       setLoadProgress(100, 'Entering world...');
 
-      var playerSprite = GameEngine.spriteLoader.getSprite('player_default');
-      if (playerSprite) player.spriteSheet = playerSprite;
+      var raceSpriteKey = player.race ? 'race_' + player.race.toLowerCase() : null;
+      var raceSprite = raceSpriteKey ? GameEngine.spriteLoader.getSprite(raceSpriteKey) : null;
+      player.spriteSheet = raceSprite || GameEngine.spriteLoader.getSprite('player_default');
+
+      // Wire tilesets to terrain types
+      var tilesetMap = {
+        1: 'tileset_grass_stone',   // STONE
+        3: 'tileset_grass_mud',     // MUD
+        4: 'tileset_grass_snow',    // SNOW
+        5: 'tileset_dungeon',       // DUNGEON_FLOOR
+      };
+      for (var tileType in tilesetMap) {
+        var tsImg = GameEngine.spriteLoader.getSprite(tilesetMap[tileType]);
+        if (tsImg) {
+          World.loadTilesetForType(parseInt(tileType), tsImg);
+        }
+      }
 
       injectGameLoopHooks();
       setupRealtimeSubscriptions();
@@ -266,6 +298,12 @@
       if (player.insanityStage > 0) {
         UI.applyInsanityEffect(ctx, player.insanityStage, cam.viewWidth, cam.viewHeight);
       }
+
+      // Death screen overlay (full-screen, drawn last)
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      UI.renderDeathScreen(ctx, 1 / 60);
+      ctx.restore();
     };
   }
 
@@ -276,6 +314,21 @@
   function handleInput(dt, input) {
     if (!player || player.isDown || player.isDead) return;
     if (Chat.isChatInputOpen()) return;
+
+    if (UI.isNPCDialogueOpen()) {
+      if (input.mouse.clicked) {
+        var cam = GameEngine.getCamera();
+        UI.handleNPCDialogueClick(input.mouse.x * cam.zoom, input.mouse.y * cam.zoom, cam.zoom);
+        input.mouse.clicked = false;
+      }
+      if (input.keys.has('Escape') || input.keys.has('e')) {
+        UI.closeNPCDialogue();
+        input.keys.delete('Escape');
+        input.keys.delete('e');
+      }
+      return;
+    }
+
     if (UI.isMenuOpen()) {
       if (input.keys.has('Escape')) {
         UI.closeAllMenus();
@@ -318,6 +371,38 @@
       player.chargeMana(dt);
     }
 
+    // Spell casting via number keys
+    for (var si = 1; si <= 9; si++) {
+      if (keys.has(String(si))) {
+        var spellIdx = si - 1;
+        if (player.knownSpells && spellIdx < player.knownSpells.length) {
+          player.selectedSpell = spellIdx;
+          player.castSpell(player.knownSpells[spellIdx]);
+        }
+        keys.delete(String(si));
+      }
+    }
+
+    // Scroll spell selection with Q/R
+    if (keys.has('q') && player.knownSpells && player.knownSpells.length > 0) {
+      player.selectedSpell = (player.selectedSpell - 1 + player.knownSpells.length) % player.knownSpells.length;
+      keys.delete('q');
+    }
+    if (keys.has('r') && player.knownSpells && player.knownSpells.length > 0) {
+      player.selectedSpell = (player.selectedSpell + 1) % player.knownSpells.length;
+      keys.delete('r');
+    }
+
+    // Dodge and parry
+    if (keys.has(' ')) {
+      Combat.dodge(player);
+      keys.delete(' ');
+    }
+    if (keys.has('v')) {
+      Combat.parry(player);
+      keys.delete('v');
+    }
+
     if (keys.has('e')) {
       checkNPCProximity();
       keys.delete('e');
@@ -331,6 +416,11 @@
     if (keys.has('i')) {
       UI.toggleInventory();
       keys.delete('i');
+    }
+
+    if (keys.has('c')) {
+      UI.openCharSheet();
+      keys.delete('c');
     }
 
     if (keys.has('m')) {
@@ -354,7 +444,9 @@
       var ndx = player.x - n.x * ts;
       var ndy = player.y - n.y * ts;
       if (Math.sqrt(ndx * ndx + ndy * ndy) < NPC_INTERACT_RANGE) {
-        UI.showNotification(n.type + ': "Speak, wanderer."', '#cccccc', 3);
+        UI.showNPCDialogue(n, player, function (actionId, playerRef) {
+          UI.handleNPCAction(actionId, playerRef);
+        });
         return;
       }
     }
@@ -432,7 +524,11 @@
     rp._targetX = p.x;
     rp._targetY = p.y;
 
-    // Override update: only interpolate position and animate
+    // Assign sprite based on race or use default
+    var raceSpriteKey = p.race ? 'race_' + p.race.toLowerCase() : null;
+    var raceSprite = raceSpriteKey ? GameEngine.spriteLoader.getSprite(raceSpriteKey) : null;
+    rp.spriteSheet = raceSprite || GameEngine.spriteLoader.getSprite('player_default') || null;
+
     rp.update = function (dt) {
       if (typeof this._targetX === 'number') {
         this.x += (this._targetX - this.x) * REMOTE_LERP;

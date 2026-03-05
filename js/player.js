@@ -63,7 +63,9 @@
     this.zone          = d.current_zone || 'Spawn';
     this.insanityStage = d.insanity_stage || 0;
     this.injuries      = d.injuries ? d.injuries.slice() : [];
-    this.statusEffects = d.status_effects ? d.status_effects.slice() : [];
+    this.statusEffects = d.status_effects ? d.status_effects.slice() : {};
+    this.knownSpells   = d.known_spells ? d.known_spells.slice() : [];
+    this.selectedSpell = 0;
     this.isLocalPlayer = false;
 
     this.width  = PLAYER_W;
@@ -146,9 +148,33 @@
     var ny = this.y + dy * speed * dt;
 
     if (World.isWalkable(nx, this.y)) {
+      if (World.checkAlignmentBarrier) {
+        var bx = World.checkAlignmentBarrier(this, nx, this.y);
+        if (bx.blocked) {
+          this.x = bx.knockbackX;
+          this.y = bx.knockbackY;
+          this._barrierEffect = { effect: bx.effect, timer: 0.3, text: bx.text, color: bx.color };
+          if (window.UI && window.UI.showNotification) {
+            window.UI.showNotification(bx.text, bx.color, 2);
+          }
+          return;
+        }
+      }
       this.x = nx;
     }
     if (World.isWalkable(this.x, ny)) {
+      if (World.checkAlignmentBarrier) {
+        var by = World.checkAlignmentBarrier(this, this.x, ny);
+        if (by.blocked) {
+          this.x = by.knockbackX;
+          this.y = by.knockbackY;
+          this._barrierEffect = { effect: by.effect, timer: 0.3, text: by.text, color: by.color };
+          if (window.UI && window.UI.showNotification) {
+            window.UI.showNotification(by.text, by.color, 2);
+          }
+          return;
+        }
+      }
       this.y = ny;
     }
 
@@ -177,20 +203,12 @@
     this.mana = Math.min(this.maxMana, this.mana + MANA_CHARGE_RATE * dt);
   };
 
-  Player.prototype.castSpell = function (spellId) {
+  Player.prototype.castSpell = function (spellId, targetPos) {
     if (this.isDown) return false;
-    if (this._hasStatus('manaLocked') || this._hasStatus('blackFlames')) return false;
-
-    var cost = this._getSpellCost(spellId);
-    if (this.mana < cost) return false;
-
-    this.mana -= cost;
-    return true;
-  };
-
-  Player.prototype._getSpellCost = function (spellId) {
-    var costs = { fireball: 30, heal: 40, shield: 25, bolt: 20 };
-    return costs[spellId] || 25;
+    if (typeof Combat !== 'undefined' && Combat.castSpell) {
+      return Combat.castSpell(this, spellId, targetPos);
+    }
+    return false;
   };
 
   // ── Injury ───────────────────────────────────────────────────────
@@ -238,38 +256,30 @@
 
   Player.prototype.applyStatus = function (type, duration) {
     if (!STATUS_CONFIG[type]) return;
-    this.statusEffects.push({ type: type, remaining: duration });
+    if (!this.statusEffects || Array.isArray(this.statusEffects)) {
+      this.statusEffects = {};
+    }
+    this.statusEffects[type] = { timer: duration };
   };
 
   Player.prototype.updateStatuses = function (dt) {
-    for (var i = this.statusEffects.length - 1; i >= 0; i--) {
-      var se = this.statusEffects[i];
-      se.remaining -= dt;
-
-      var cfg = STATUS_CONFIG[se.type];
-      if (cfg && cfg.dps > 0) {
-        this._rawDamage(cfg.dps * dt);
-      }
-
-      if (se.remaining <= 0) {
-        this.statusEffects.splice(i, 1);
-      }
-    }
+    // Status effects are now managed by Combat.updateCombat and synced as an object
+    // This method is kept for backwards compatibility but should not be called directly
   };
 
   Player.prototype._hasStatus = function (type) {
-    for (var i = 0; i < this.statusEffects.length; i++) {
-      if (this.statusEffects[i].type === type) return true;
+    if (this.statusEffects && typeof this.statusEffects === 'object' && !Array.isArray(this.statusEffects)) {
+      return !!this.statusEffects[type];
     }
     return false;
   };
 
   Player.prototype._statusStackCount = function (type) {
-    var count = 0;
-    for (var i = 0; i < this.statusEffects.length; i++) {
-      if (this.statusEffects[i].type === type) count++;
+    if (this.statusEffects && typeof this.statusEffects === 'object' && !Array.isArray(this.statusEffects)) {
+      var s = this.statusEffects[type];
+      return s ? (s.stacks || 1) : 0;
     }
-    return count;
+    return 0;
   };
 
   // ── Damage ───────────────────────────────────────────────────────
@@ -321,32 +331,39 @@
 
     if (this.lives <= 0) {
       this.wipe();
+    } else {
+      this.hp = Math.round(this.maxHp * 0.25);
     }
   };
 
   Player.prototype.wipe = function () {
-    return {
-      id:         this.id,
-      name:       this.name,
-      race:       this.race,
-      class:      this.currentClass,
-      subclass:   this.subclass,
-      classTier:  this.classTier,
-      alignment:  this.alignment,
-      insight:    this.insight,
-      silver:     this.silver,
-      valu:       this.valu,
-      injuries:   this.injuries.slice(),
-      insanity:   this.insanityStage,
-      plane:      this.plane,
-      zone:       this.zone,
-      ancestor_character_id: this.id,
-      inherited_race: this.race,
-      inherited_alignment_seed: this.alignment,
-      inherited_heirlooms: this.injuries,
-      inherited_mana_unlocked: this.mana > 0,
-      wipe_reason: 'death',
+    var lineageData = {
+      user_id:    this.userId,
+      character_id: this.id,
+      wipe_date:  new Date().toISOString(),
+      inherited_heirlooms: [],
     };
+
+    var self = this;
+
+    if (typeof SupabaseHelper !== 'undefined' && SupabaseHelper.insertLineage) {
+      SupabaseHelper.insertLineage(lineageData);
+    }
+
+    if (typeof UI !== 'undefined' && UI.showDeathScreen) {
+      UI.showDeathScreen(this, {
+        name: this.name,
+        race: this.race,
+        class: this.currentClass,
+        alignment: this.alignment,
+        insight: this.insight,
+        silver: this.silver,
+        valu: this.valu,
+        inherited_heirlooms: [],
+      }, function () {
+        window.location.reload();
+      });
+    }
   };
 
   // ── Alignment ────────────────────────────────────────────────────

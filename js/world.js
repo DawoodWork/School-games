@@ -49,6 +49,7 @@ window.World = (function () {
 
   let tileMap = null;
   let tilesetImage = null;
+  let tilesetImages = {};
   let currentPlane = "gaia";
   let snowParticles = [];
 
@@ -424,6 +425,10 @@ window.World = (function () {
     tilesetImage = image;
   }
 
+  function loadTilesetForType(tileType, image) {
+    tilesetImages[tileType] = image;
+  }
+
   function getTileAt(worldX, worldY) {
     const tx = Math.floor(worldX / TILE_SIZE);
     const ty = Math.floor(worldY / TILE_SIZE);
@@ -432,12 +437,8 @@ window.World = (function () {
   }
 
   function getZoneAt(worldX, worldY) {
-    const tx = typeof worldX === "number" && worldX >= TILE_SIZE
-      ? Math.floor(worldX / TILE_SIZE)
-      : worldX;
-    const ty = typeof worldY === "number" && worldY >= TILE_SIZE
-      ? Math.floor(worldY / TILE_SIZE)
-      : worldY;
+    const tx = Math.floor(worldX / TILE_SIZE);
+    const ty = Math.floor(worldY / TILE_SIZE);
 
     for (const zone of zones) {
       const b = zone.bounds;
@@ -491,7 +492,12 @@ window.World = (function () {
         const px = tx * TILE_SIZE - camera.x;
         const py = ty * TILE_SIZE - camera.y;
 
-        if (tilesetImage) {
+        if (tilesetImages[id]) {
+          const tsImg = tilesetImages[id];
+          const tsSrcX = 0;
+          const tsSrcY = 0;
+          ctx.drawImage(tsImg, tsSrcX, tsSrcY, TILE_SIZE, TILE_SIZE, px, py, TILE_SIZE, TILE_SIZE);
+        } else if (tilesetImage) {
           ctx.drawImage(
             tilesetImage,
             id * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE,
@@ -611,6 +617,7 @@ window.World = (function () {
     init: init,
     render: render,
     loadTileset: loadTileset,
+    loadTilesetForType: loadTilesetForType,
     getTileAt: getTileAt,
     getZoneAt: getZoneAt,
     isWalkable: isWalkable,

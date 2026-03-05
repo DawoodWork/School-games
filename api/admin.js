@@ -90,12 +90,45 @@ module.exports = async function handler(req, res) {
       }
 
       case 'give_ability': {
-        data = { stub: true, message: 'Ability system not yet implemented' };
+        const { charId, abilityId } = payload;
+        const { data: charRow, error: fetchErr } = await admin
+          .from('characters')
+          .select('known_spells')
+          .eq('id', charId)
+          .single();
+        if (fetchErr) throw fetchErr;
+
+        const spells = charRow.known_spells || [];
+        if (spells.indexOf(abilityId) === -1) {
+          spells.push(abilityId);
+        }
+
+        const { error } = await admin
+          .from('characters')
+          .update({ known_spells: spells })
+          .eq('id', charId);
+        if (error) throw error;
+        data = { charId, known_spells: spells };
         break;
       }
 
       case 'remove_ability': {
-        data = { stub: true, message: 'Ability system not yet implemented' };
+        const { charId, abilityId } = payload;
+        const { data: charRow, error: fetchErr } = await admin
+          .from('characters')
+          .select('known_spells')
+          .eq('id', charId)
+          .single();
+        if (fetchErr) throw fetchErr;
+
+        const spells = (charRow.known_spells || []).filter(s => s !== abilityId);
+
+        const { error } = await admin
+          .from('characters')
+          .update({ known_spells: spells })
+          .eq('id', charId);
+        if (error) throw error;
+        data = { charId, known_spells: spells };
         break;
       }
 

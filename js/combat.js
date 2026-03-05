@@ -563,6 +563,23 @@ window.Combat = (function () {
     updateStatuses(dt, player);
     updatePosture(dt, player);
 
+    // Sync combat state back to player object so UI/player code can read it
+    player.combatTagged = state.combatTagged;
+    player.posture = state.posture;
+    player.maxPosture = POSTURE_MAX;
+    player.isStaggered = state.isStaggered;
+    player.isDodging = state.isDodging;
+
+    var syncedStatuses = {};
+    var statusKeys = Object.keys(state.statuses);
+    for (var si = 0; si < statusKeys.length; si++) {
+      syncedStatuses[statusKeys[si]] = {
+        timer: state.statuses[statusKeys[si]].timer,
+        stacks: state.statuses[statusKeys[si]].stacks || 0
+      };
+    }
+    player.statusEffects = syncedStatuses;
+
     // Update all entities that belong to combat (projectiles, aoe)
     if (entities) {
       for (var i = entities.length - 1; i >= 0; i--) {
