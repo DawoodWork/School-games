@@ -39,16 +39,20 @@ window.GameEngine = (function () {
 
   // ── Desktop Input ──────────────────────────────────────────────────────────
 
+  function normalizeKey(key) {
+    return key.length === 1 ? key.toLowerCase() : key;
+  }
+
   function initDesktopInput() {
     window.addEventListener('keydown', function (e) {
-      input.keys.add(e.key);
+      input.keys.add(normalizeKey(e.key));
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
         e.preventDefault();
       }
     });
 
     window.addEventListener('keyup', function (e) {
-      input.keys.delete(e.key);
+      input.keys.delete(normalizeKey(e.key));
     });
 
     canvas.addEventListener('mousedown', function (e) {

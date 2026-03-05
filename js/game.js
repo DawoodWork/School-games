@@ -15,11 +15,9 @@
 
   var SPRITE_MANIFEST = {
     player_default: 'assets/sprites/player_default.png',
-    tileset:        'assets/sprites/tileset.png',
     npc_doctor:     'assets/sprites/npc_doctor.png',
     npc_blacksmith: 'assets/sprites/npc_blacksmith.png',
     npc_trainer:    'assets/sprites/npc_trainer.png',
-    npc_guard:      'assets/sprites/npc_guard.png',
   };
 
   // ── Shared state ───────────────────────────────────────────────
@@ -196,6 +194,9 @@
     loadSprites(function () {
       setLoadProgress(100, 'Entering world...');
 
+      var playerSprite = GameEngine.spriteLoader.getSprite('player_default');
+      if (playerSprite) player.spriteSheet = playerSprite;
+
       injectGameLoopHooks();
       setupRealtimeSubscriptions();
       startPositionBroadcast();
@@ -287,10 +288,10 @@
     var dx = 0;
     var dy = 0;
 
-    if (keys.has('w') || keys.has('W') || keys.has('ArrowUp'))    dy -= 1;
-    if (keys.has('s') || keys.has('S') || keys.has('ArrowDown'))  dy += 1;
-    if (keys.has('a') || keys.has('A') || keys.has('ArrowLeft'))  dx -= 1;
-    if (keys.has('d') || keys.has('D') || keys.has('ArrowRight')) dx += 1;
+    if (keys.has('w') || keys.has('ArrowUp'))    dy -= 1;
+    if (keys.has('s') || keys.has('ArrowDown'))  dy += 1;
+    if (keys.has('a') || keys.has('ArrowLeft'))  dx -= 1;
+    if (keys.has('d') || keys.has('ArrowRight')) dx += 1;
 
     if (input.isMobile && (input.joystick.dx || input.joystick.dy)) {
       dx = input.joystick.dx;
@@ -313,32 +314,28 @@
       input.mouse.clicked = false;
     }
 
-    if (keys.has('g') || keys.has('G')) {
+    if (keys.has('g')) {
       player.chargeMana(dt);
     }
 
-    if (keys.has('e') || keys.has('E')) {
+    if (keys.has('e')) {
       checkNPCProximity();
       keys.delete('e');
-      keys.delete('E');
     }
 
-    if (keys.has('t') || keys.has('T')) {
+    if (keys.has('t')) {
       Chat.openChatInput();
       keys.delete('t');
-      keys.delete('T');
     }
 
-    if (keys.has('i') || keys.has('I')) {
+    if (keys.has('i')) {
       UI.toggleInventory();
       keys.delete('i');
-      keys.delete('I');
     }
 
-    if (keys.has('m') || keys.has('M')) {
+    if (keys.has('m')) {
       UI.openMap();
       keys.delete('m');
-      keys.delete('M');
     }
 
     if (keys.has('Escape')) {
@@ -346,7 +343,7 @@
       keys.delete('Escape');
     }
 
-    player.isBlocking = keys.has('f') || keys.has('F');
+    player.isBlocking = keys.has('f');
   }
 
   function checkNPCProximity() {

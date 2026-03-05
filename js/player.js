@@ -17,8 +17,8 @@
   var COMBAT_TAG_DURATION = 10;
   var SYNC_DEBOUNCE_MS = 500;
   var ANIM_FRAME_DURATION = 0.15;
-  var PLAYER_W = 12;
-  var PLAYER_H = 16;
+  var PLAYER_W = 32;
+  var PLAYER_H = 32;
 
   var INJURY_TYPES = ['broken_arm', 'broken_leg', 'slash_wound', 'cataracts', 'anemia'];
 
@@ -541,11 +541,17 @@
 
     // Username label
     var font = "'Press Start 2P', monospace";
-    ctx.font = '4px ' + font;
+    var label = this.name || '???';
+    var labelX = sx + PLAYER_W / 2;
+    var labelY = sy - 4;
+    ctx.font = '5px ' + font;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#000000';
+    ctx.strokeText(label, labelX, labelY);
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(this.name || '???', sx + PLAYER_W / 2, sy - 4);
+    ctx.fillText(label, labelX, labelY);
 
     // HP bar
     var barW = PLAYER_W + 4;
@@ -591,19 +597,19 @@
 
     // Head highlight
     ctx.fillStyle = '#ddc8a0';
-    ctx.fillRect(sx + 3, sy + 1, 6, 5);
+    ctx.fillRect(sx + 10, sy + 4, 12, 10);
 
     // Eyes based on facing
     ctx.fillStyle = '#1a1a1a';
     if (this.facing === 'south') {
-      ctx.fillRect(sx + 4, sy + 3, 1, 1);
-      ctx.fillRect(sx + 7, sy + 3, 1, 1);
+      ctx.fillRect(sx + 12, sy + 8, 2, 2);
+      ctx.fillRect(sx + 18, sy + 8, 2, 2);
     } else if (this.facing === 'north') {
       // no eyes visible from behind
     } else if (this.facing === 'east') {
-      ctx.fillRect(sx + 7, sy + 3, 1, 1);
+      ctx.fillRect(sx + 18, sy + 8, 2, 2);
     } else {
-      ctx.fillRect(sx + 4, sy + 3, 1, 1);
+      ctx.fillRect(sx + 12, sy + 8, 2, 2);
     }
   };
 
@@ -643,7 +649,7 @@
       anemia:      { letter: 'A', color: '#aa8888' },
     };
 
-    var startX = sx - icons.length * 3;
+    var startX = sx + PLAYER_W / 2 - icons.length * 3;
     for (var j = 0; j < icons.length; j++) {
       var info = abbrevColors[icons[j]];
       if (!info) continue;
@@ -654,7 +660,7 @@
       ctx.fill();
 
       ctx.fillStyle = '#ffffff';
-      ctx.font = '2px monospace';
+      ctx.font = '3px monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(info.letter, startX + j * 6 + 2, sy - 8);
