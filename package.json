@@ -8,6 +8,7 @@
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",
+    "skillfish": "^1.0.30",
     "vercel": "^50.27.1"
   }
 }

@@ -123,12 +123,47 @@
   }
 
   async function addInventoryItem(item) {
+    const { data: existing } = await sb
+      .from('inventory')
+      .select('*')
+      .eq('character_id', item.character_id)
+      .eq('item_name', item.item_name)
+      .single();
+
+    if (existing) {
+      const { data, error } = await sb
+        .from('inventory')
+        .update({ quantity: existing.quantity + (item.quantity || 1) })
+        .eq('id', existing.id)
+        .select()
+        .single();
+      return { data, error };
+    }
+
     const { data, error } = await sb
       .from('inventory')
       .insert(item)
       .select()
       .single();
     return { data, error };
+  }
+
+  async function updateInventoryItem(inventoryId, updates) {
+    const { data, error } = await sb
+      .from('inventory')
+      .update(updates)
+      .eq('id', inventoryId)
+      .select()
+      .single();
+    return { data, error };
+  }
+
+  async function removeInventoryItem(inventoryId) {
+    const { error } = await sb
+      .from('inventory')
+      .delete()
+      .eq('id', inventoryId);
+    return { error };
   }
 
   // ── Lineage ───────────────────────────────────────────────
@@ -314,7 +349,7 @@
     loadCharacter, createCharacter, saveCharacterPosition,
     updateCharacterStats, setCharacterOnline, deleteCharacter,
     loadNearbyPlayers,
-    loadInventory, addInventoryItem,
+    loadInventory, addInventoryItem, updateInventoryItem, removeInventoryItem,
     insertLineage, loadLineage,
     sendChatMessage,
     insertWorldEvent,

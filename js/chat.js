@@ -56,7 +56,7 @@
       navigator.maxTouchPoints > 0 ||
       /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    var plane = player.plane || 'mortal';
+    var plane = player.plane || 'gaia';
     chatChannel = window.SupabaseHelper.subscribeToChat(plane, function (payload) {
       receiveMessage(payload);
     });
@@ -100,8 +100,8 @@
 
     var now = Date.now();
     if (now - lastSendTime < RATE_LIMIT_MS) {
-      if (window.UI && window.UI.addNotification) {
-        window.UI.addNotification('Too fast!', 'warning');
+      if (window.UI && window.UI.showNotification) {
+        window.UI.showNotification('Too fast!', 'warning');
       }
       return;
     }
@@ -116,7 +116,7 @@
       x: localPlayer.x,
       y: localPlayer.y,
       race: localPlayer.race || '',
-      plane: localPlayer.plane || 'mortal',
+      plane: localPlayer.plane || 'gaia',
       alignment: localPlayer.alignment || 'Neutral',
       timestamp: Date.now()
     };
@@ -132,7 +132,7 @@
       text,
       localPlayer.x,
       localPlayer.y,
-      localPlayer.plane || 'mortal'
+      localPlayer.plane || 'gaia'
     );
 
     _addBubble(payload);
