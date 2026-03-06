@@ -29,6 +29,12 @@
     tileset_grass_mud:   'assets/tilesets/grass_mud.png',
     tileset_grass_snow:  'assets/tilesets/grass_snow.png',
     tileset_dungeon:     'assets/tilesets/dungeon.png',
+    enemy_hollow:        'assets/sprites/enemy_hollow.png',
+    enemy_shade:         'assets/sprites/enemy_shade.png',
+    enemy_brute:         'assets/sprites/enemy_brute.png',
+    equipment_icons:     'assets/sprites/equipment_icons.png',
+    spell_effects:       'assets/sprites/spell_effects.png',
+    item_icons:          'assets/sprites/item_icons.png',
   };
 
   // ── Shared state ───────────────────────────────────────────────
@@ -118,7 +124,7 @@
         current_zone:   'Spawn',
         insanity_stage: 0,
         injuries:       [],
-        status_effects: [],
+        status_effects: {},
         is_online:      false,
       };
 
@@ -200,6 +206,7 @@
     UI.initHUD(player);
     Chat.init(player);
     Combat.initCombat(player);
+    Enemies.init(player);
 
     SupabaseHelper.loadInventory(player.id).then(function (result) {
       if (result.data) {
@@ -271,7 +278,9 @@
       if (input) handleInput(dt, input);
       originalUpdate.call(this, dt);
 
-      Combat.updateCombat(dt, player, getRemotePlayersArray());
+      var allTargets = getRemotePlayersArray().concat(Enemies.getEnemies());
+      Combat.updateCombat(dt, player, allTargets);
+      Enemies.update(dt);
       Chat.updateBubbles(dt);
       UI.update(dt);
       updateRemotePlayers(dt);
@@ -333,6 +342,18 @@
       if (input.keys.has('Escape')) {
         UI.closeAllMenus();
         input.keys.delete('Escape');
+      }
+      if (input.mouse.clicked) {
+        var cam = GameEngine.getCamera();
+        var vw = cam.viewportW / cam.zoom;
+        var vh = cam.viewportH / cam.zoom;
+        var menu = UI.getActiveMenu();
+        if (menu === 'pause') {
+          UI.handlePauseClick(input.mouse.x, input.mouse.y, vw, vh);
+        } else if (menu === 'inventory') {
+          UI.handleInventoryClick(input.mouse.x, input.mouse.y, vw, vh);
+        }
+        input.mouse.clicked = false;
       }
       return;
     }
@@ -495,6 +516,7 @@
         rp.race        = p.race;
         rp.alignment   = p.alignment;
         rp.currentClass = p.class;
+        rp.equipment   = p.equipment || {};
       } else {
         addRemotePlayer(p);
       }
@@ -518,6 +540,7 @@
       max_hp:        p.maxHp || 100,
       alignment:     p.alignment || 0,
       current_class: p.class || null,
+      equipment:     p.equipment || {},
     });
 
     rp.isLocalPlayer = false;

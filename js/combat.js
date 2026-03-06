@@ -73,6 +73,17 @@ window.Combat = (function () {
   var POISON_DPS = 5;
   var POISON_DURATION = 20;
 
+  var EQUIPMENT_STATS = {
+    iron_sword:     { meleeDamage: 5 },
+    steel_sword:    { meleeDamage: 8 },
+    dark_blade:     { meleeDamage: 12 },
+    steel_shield:   { maxPosture: 15 },
+    iron_shield:    { maxPosture: 10 },
+    leather_armor:  { damageReduction: 0.10 },
+    chain_armor:    { damageReduction: 0.18 },
+    plate_armor:    { damageReduction: 0.25 },
+  };
+
   // ── Per-Player Combat State ─────────────────────────────────────────────────
 
   var combatStates = new Map();
@@ -109,12 +120,12 @@ window.Combat = (function () {
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
   function getFacingVector(player) {
-    var dir = player.facing || 'down';
+    var dir = player.facing || 'south';
     switch (dir) {
-      case 'up':    return { x: 0, y: -1 };
-      case 'down':  return { x: 0, y: 1 };
-      case 'left':  return { x: -1, y: 0 };
-      case 'right': return { x: 1, y: 0 };
+      case 'up':    case 'north': return { x: 0, y: -1 };
+      case 'down':  case 'south': return { x: 0, y: 1 };
+      case 'left':  case 'west':  return { x: -1, y: 0 };
+      case 'right': case 'east':  return { x: 1, y: 0 };
       default:      return { x: 0, y: 1 };
     }
   }
@@ -152,6 +163,13 @@ window.Combat = (function () {
       mult *= STAGGER_CRIT_MULTIPLIER;
     }
 
+    if (target.equipment && target.equipment.armor) {
+      var armorStats = EQUIPMENT_STATS[target.equipment.armor];
+      if (armorStats && armorStats.damageReduction) {
+        mult *= (1 - armorStats.damageReduction);
+      }
+    }
+
     return Math.round(amount * mult);
   }
 
@@ -175,6 +193,13 @@ window.Combat = (function () {
 
     var hitIndex = state.comboCount;
     var damage = COMBO_DAMAGE[hitIndex] || COMBO_DAMAGE[COMBO_DAMAGE.length - 1];
+
+    if (player.equipment && player.equipment.weapon) {
+      var weaponBonus = EQUIPMENT_STATS[player.equipment.weapon];
+      if (weaponBonus && weaponBonus.meleeDamage) {
+        damage += weaponBonus.meleeDamage;
+      }
+    }
 
     var attackerState = getState(player);
     if (attackerState.buffs.damageUp) {
@@ -328,7 +353,7 @@ window.Combat = (function () {
   }
 
   function gripPlayer(attacker, target) {
-    if (!target || !target.downed) return false;
+    if (!target || !target.isDown) return false;
     var state = getState(attacker);
     if (state.isGripping || state.isStaggered) return false;
 
@@ -345,7 +370,7 @@ window.Combat = (function () {
   }
 
   function carryPlayer(carrier, target) {
-    if (!target || !target.downed) return false;
+    if (!target || !target.isDown) return false;
     var state = getState(carrier);
     if (state.isCarrying || state.isGripping || state.isStaggered) return false;
 
@@ -408,7 +433,11 @@ window.Combat = (function () {
       target.hp -= finalDamage;
       if (target.hp <= 0) {
         target.hp = 0;
-        target.downed = true;
+        if (typeof target.goDown === 'function') {
+          target.goDown();
+        } else {
+          target.isDown = true;
+        }
       }
     }
 
@@ -455,7 +484,11 @@ window.Combat = (function () {
           target.hp -= POISON_DPS * dt;
           if (target.hp <= 0) {
             target.hp = 0;
-            target.downed = true;
+            if (typeof target.goDown === 'function') {
+              target.goDown();
+            } else {
+              target.isDown = true;
+            }
           }
         }
       }
@@ -469,10 +502,22 @@ window.Combat = (function () {
 
   // ── Posture ─────────────────────────────────────────────────────────────────
 
+  function getMaxPosture(target) {
+    var max = POSTURE_MAX;
+    if (target.equipment && target.equipment.shield) {
+      var shieldStats = EQUIPMENT_STATS[target.equipment.shield];
+      if (shieldStats && shieldStats.maxPosture) {
+        max += shieldStats.maxPosture;
+      }
+    }
+    return max;
+  }
+
   function updatePosture(dt, target) {
     var state = getState(target);
-    if (!target.blocking && state.posture < POSTURE_MAX) {
-      state.posture = Math.min(POSTURE_MAX, state.posture + POSTURE_REGEN_RATE * dt);
+    var max = getMaxPosture(target);
+    if (!target.blocking && state.posture < max) {
+      state.posture = Math.min(max, state.posture + POSTURE_REGEN_RATE * dt);
     }
   }
 
@@ -566,7 +611,7 @@ window.Combat = (function () {
     // Sync combat state back to player object so UI/player code can read it
     player.combatTagged = state.combatTagged;
     player.posture = state.posture;
-    player.maxPosture = POSTURE_MAX;
+    player.maxPosture = getMaxPosture(player);
     player.isStaggered = state.isStaggered;
     player.isDodging = state.isDodging;
 
@@ -594,10 +639,6 @@ window.Combat = (function () {
   function completeGrip(attacker, target) {
     if (!target) return;
 
-    if (typeof target.lives === 'number') {
-      target.lives -= 1;
-    }
-
     if (typeof attacker.alignment === 'number') {
       attacker.alignment += GRIP_ALIGNMENT_SHIFT;
     }
@@ -609,6 +650,14 @@ window.Combat = (function () {
         attacker_name: attacker.name || 'Unknown',
         target_name: target.name || 'Unknown',
       }, attacker.plane || 'gaia', attacker.zone || 'unknown');
+    }
+
+    if (typeof target.executeGrip === 'function') {
+      target.executeGrip();
+    } else {
+      if (typeof target.lives === 'number') {
+        target.lives -= 1;
+      }
     }
   }
 
@@ -687,18 +736,74 @@ window.Combat = (function () {
     var sx = this.x - camera.x;
     var sy = this.y - camera.y;
 
-    ctx.beginPath();
-    ctx.arc(sx, sy, 3, 0, Math.PI * 2);
-    ctx.fillStyle = this.spellDef.color || '#ffffff';
-    ctx.fill();
-    ctx.closePath();
+    // Try to use spell effect sprite
+    var spellSprite = window.GameEngine && window.GameEngine.spriteLoader && window.GameEngine.spriteLoader.getSprite('spell_effects');
+    var spellSpriteMap = {
+      ignis: { col: 0, row: 0 },
+      gelidus: { col: 1, row: 0 },
+      tenebris: { col: 2, row: 0 },
+      viribus: { col: 0, row: 1 },
+      contrarium: { col: 1, row: 1 },
+      trickstus: { col: 2, row: 1 },
+      armis: { col: 0, row: 2 },
+      fimbulvetr: { col: 1, row: 2 },
+      manus_dei: { col: 2, row: 2 },
+    };
 
-    ctx.beginPath();
-    ctx.arc(sx, sy, 5, 0, Math.PI * 2);
-    ctx.fillStyle = this.spellDef.trailColor || this.spellDef.color || '#ffffff';
-    ctx.globalAlpha = 0.3;
-    ctx.fill();
-    ctx.closePath();
+    if (spellSprite && spellSpriteMap[this.spellDef.id]) {
+      var spritePos = spellSpriteMap[this.spellDef.id];
+      
+      // Add rotation based on velocity direction
+      var angle = Math.atan2(this.vy, this.vx);
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(angle);
+      
+      // Draw spell effect sprite
+      ctx.drawImage(
+        spellSprite,
+        spritePos.col * 16, spritePos.row * 16, 16, 16,
+        -8, -8, 16, 16
+      );
+      
+      ctx.restore();
+    } else {
+      // Fallback to original circle rendering
+      ctx.beginPath();
+      ctx.arc(sx, sy, 3, 0, Math.PI * 2);
+      ctx.fillStyle = this.spellDef.color || '#ffffff';
+      ctx.fill();
+      ctx.closePath();
+
+      ctx.beginPath();
+      ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = this.spellDef.trailColor || this.spellDef.color || '#ffffff';
+      ctx.globalAlpha = 0.3;
+      ctx.fill();
+      ctx.closePath();
+      ctx.globalAlpha = 1;
+    }
+
+    // Add particle trail effect for better visual impact
+    this._drawTrail(ctx, sx, sy);
+  };
+
+  Projectile.prototype._drawTrail = function (ctx, sx, sy) {
+    // Draw a simple particle trail
+    var trailLength = 3;
+    for (var i = 1; i <= trailLength; i++) {
+      var alpha = 0.5 - (i / trailLength) * 0.4;
+      var size = 2 - (i / trailLength);
+      var trailX = sx - (this.vx / 60) * i * 2; // Trail behind projectile
+      var trailY = sy - (this.vy / 60) * i * 2;
+      
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(trailX, trailY, size, 0, Math.PI * 2);
+      ctx.fillStyle = this.spellDef.trailColor || this.spellDef.color || '#ffffff';
+      ctx.fill();
+      ctx.closePath();
+    }
     ctx.globalAlpha = 1;
   };
 
@@ -827,5 +932,6 @@ window.Combat = (function () {
     updateCombat: updateCombat,
     getCombatTimeRemaining: getCombatTimeRemaining,
     SPELLS: SPELLS,
+    EQUIPMENT_STATS: EQUIPMENT_STATS,
   };
 })();

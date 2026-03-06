@@ -59,14 +59,25 @@
     this.currentClass  = d.current_class || null;
     this.subclass      = d.subclass || null;
     this.classTier     = d.class_tier || 0;
+    this.isUber        = this.classTier === 'master' || this.classTier >= 3;
     this.plane         = d.current_plane || 'gaia';
     this.zone          = d.current_zone || 'Spawn';
     this.insanityStage = d.insanity_stage || 0;
     this.injuries      = d.injuries ? d.injuries.slice() : [];
-    this.statusEffects = d.status_effects ? d.status_effects.slice() : {};
+    this.statusEffects = d.status_effects && typeof d.status_effects === 'object' && !Array.isArray(d.status_effects) ? Object.assign({}, d.status_effects) : {};
     this.knownSpells   = d.known_spells ? d.known_spells.slice() : [];
     this.selectedSpell = 0;
     this.isLocalPlayer = false;
+
+    // Equipment
+    var equip = d.equipment || {};
+    this.equipment = {
+      weapon: equip.weapon || null,
+      armor:  equip.armor  || null,
+      shield: equip.shield || null,
+    };
+    this.xp    = d.xp || 0;
+    this.level = d.level || 1;
 
     this.width  = PLAYER_W;
     this.height = PLAYER_H;
@@ -408,6 +419,9 @@
         insanity_stage:  self.insanityStage,
         injuries:        self.injuries,
         status_effects:  self.statusEffects,
+        equipment:       self.equipment,
+        xp:              self.xp,
+        level:           self.level,
       });
     }, SYNC_DEBOUNCE_MS);
   };
@@ -432,6 +446,7 @@
       zone:      this.zone,
       alignment: this.alignment,
       class:     this.currentClass,
+      equipment: this.equipment,
     };
   };
 
@@ -540,6 +555,9 @@
       this._drawFallback(ctx, sx, sy);
     }
 
+    // Equipment overlay rendering
+    this._drawEquipment(ctx, sx, sy);
+
     // Damage flash overlay
     if (this._flashTimer > 0) {
       ctx.globalAlpha = 0.6;
@@ -643,16 +661,8 @@
   };
 
   Player.prototype._drawStatusIndicators = function (ctx, sx, sy) {
-    if (this.statusEffects.length === 0) return;
-
-    var seen = {};
-    var icons = [];
-    for (var i = 0; i < this.statusEffects.length; i++) {
-      var t = this.statusEffects[i].type;
-      if (seen[t]) continue;
-      seen[t] = true;
-      icons.push(t);
-    }
+    var icons = Object.keys(this.statusEffects);
+    if (icons.length === 0) return;
 
     var abbrevColors = {
       onFire:      { letter: 'F', color: '#ff4400' },
@@ -681,6 +691,79 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(info.letter, startX + j * 6 + 2, sy - 8);
+    }
+  };
+
+  // ── Equipment Rendering ──────────────────────────────────────────────
+
+  Player.prototype._drawEquipment = function (ctx, sx, sy) {
+    if (!this.equipment) return;
+
+    var equipmentSprite = window.GameEngine && window.GameEngine.spriteLoader && window.GameEngine.spriteLoader.getSprite('equipment_icons');
+    if (!equipmentSprite) return;
+
+    var equipMap = {
+      iron_sword:     { col: 0, row: 0 },
+      steel_sword:    { col: 1, row: 0 },
+      dark_blade:     { col: 2, row: 0 },
+      iron_shield:    { col: 0, row: 1 },
+      steel_shield:   { col: 1, row: 1 },
+      leather_armor:  { col: 0, row: 2 },
+      chain_armor:    { col: 1, row: 2 },
+      plate_armor:    { col: 2, row: 2 },
+    };
+
+    // Draw weapon on right side
+    if (this.equipment.weapon && equipMap[this.equipment.weapon]) {
+      var weaponPos = equipMap[this.equipment.weapon];
+      var weaponX = sx + PLAYER_W - 8;  // Right side of player
+      var weaponY = sy + 8;             // Middle height
+      
+      // Adjust weapon position based on facing direction
+      if (this.facing === 'west') {
+        weaponX = sx - 4; // Left side when facing west
+      }
+      
+      ctx.drawImage(
+        equipmentSprite,
+        weaponPos.col * 16, weaponPos.row * 16, 16, 16,
+        weaponX, weaponY, 12, 12
+      );
+    }
+
+    // Draw shield on left side
+    if (this.equipment.shield && equipMap[this.equipment.shield]) {
+      var shieldPos = equipMap[this.equipment.shield];
+      var shieldX = sx - 4;             // Left side of player
+      var shieldY = sy + 6;             // Slightly higher
+      
+      // Adjust shield position based on facing direction
+      if (this.facing === 'west') {
+        shieldX = sx + PLAYER_W - 8; // Right side when facing west
+      }
+      
+      ctx.drawImage(
+        equipmentSprite,
+        shieldPos.col * 16, shieldPos.row * 16, 16, 16,
+        shieldX, shieldY, 10, 10
+      );
+    }
+
+    // Draw armor overlay (subtle tint on player sprite)
+    if (this.equipment.armor && this.spriteSheet) {
+      var armorTint = {
+        leather_armor:  'rgba(139, 69, 19, 0.2)',   // Brown tint
+        chain_armor:    'rgba(128, 128, 128, 0.25)', // Gray tint
+        plate_armor:    'rgba(192, 192, 192, 0.3)',  // Silver tint
+      };
+
+      var tint = armorTint[this.equipment.armor];
+      if (tint) {
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = tint;
+        ctx.fillRect(sx, sy, PLAYER_W, PLAYER_H);
+        ctx.globalAlpha = 1;
+      }
     }
   };
 

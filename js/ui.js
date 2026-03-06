@@ -36,11 +36,16 @@
   var specter = { x: 0, y: 0, active: false, alpha: 1, catchTimer: 0, catchActive: false, vignetteIntensity: 0 };
 
   var ITEM_DISPLAY = {
-    iron_sword:     { letter: 'S', color: '#aaaacc', label: 'Iron Sword' },
-    steel_shield:   { letter: 'H', color: '#8888aa', label: 'Steel Shield' },
-    leather_armor:  { letter: 'A', color: '#aa8866', label: 'Leather Armor' },
-    health_potion:  { letter: '+', color: '#44cc44', label: 'Health Potion' },
-    mana_potion:    { letter: 'M', color: '#4488ff', label: 'Mana Potion' },
+    iron_sword:     { letter: 'S', color: '#aaaacc', label: 'Iron Sword',     slot: 'weapon' },
+    steel_sword:    { letter: 'S', color: '#ccccee', label: 'Steel Sword',    slot: 'weapon' },
+    dark_blade:     { letter: 'D', color: '#8844aa', label: 'Dark Blade',     slot: 'weapon' },
+    steel_shield:   { letter: 'H', color: '#8888aa', label: 'Steel Shield',   slot: 'shield' },
+    iron_shield:    { letter: 'H', color: '#999999', label: 'Iron Shield',    slot: 'shield' },
+    leather_armor:  { letter: 'A', color: '#aa8866', label: 'Leather Armor',  slot: 'armor' },
+    chain_armor:    { letter: 'A', color: '#aaaaaa', label: 'Chain Armor',    slot: 'armor' },
+    plate_armor:    { letter: 'A', color: '#ccbbaa', label: 'Plate Armor',    slot: 'armor' },
+    health_potion:  { letter: '+', color: '#44cc44', label: 'Health Potion',  consumable: true },
+    mana_potion:    { letter: 'M', color: '#4488ff', label: 'Mana Potion',    consumable: true },
   };
 
   // ── Init ─────────────────────────────────────────────────────────
@@ -435,6 +440,64 @@
     }
   }
 
+  // ── Item Icon Rendering ─────────────────────────────────────────────
+
+  function _drawItemIcon(ctx, item, x, y, size) {
+    var disp = ITEM_DISPLAY[item.item_name] || { letter: '?', color: '#aaaaaa', label: item.item_name };
+    
+    // Try to use sprite icons first
+    var equipSprite = window.GameEngine && window.GameEngine.spriteLoader && window.GameEngine.spriteLoader.getSprite('equipment_icons');
+    var itemSprite = window.GameEngine && window.GameEngine.spriteLoader && window.GameEngine.spriteLoader.getSprite('item_icons');
+    
+    var equipMap = {
+      iron_sword:     { col: 0, row: 0 },
+      steel_sword:    { col: 1, row: 0 },
+      dark_blade:     { col: 2, row: 0 },
+      iron_shield:    { col: 0, row: 1 },
+      steel_shield:   { col: 1, row: 1 },
+      leather_armor:  { col: 0, row: 2 },
+      chain_armor:    { col: 1, row: 2 },
+      plate_armor:    { col: 2, row: 2 },
+    };
+
+    var itemMap = {
+      health_potion:  { sprite: 'item_icons', x: 0, y: 0, w: 16, h: 16 },
+      mana_potion:    { sprite: 'item_icons', x: 16, y: 0, w: 16, h: 16 },
+    };
+
+    var rendered = false;
+
+    // Render equipment sprite
+    if (equipSprite && equipMap[item.item_name]) {
+      var pos = equipMap[item.item_name];
+      ctx.drawImage(
+        equipSprite,
+        pos.col * 16, pos.row * 16, 16, 16,
+        x, y, size, size
+      );
+      rendered = true;
+    }
+    // Render consumable sprite
+    else if (itemSprite && itemMap[item.item_name]) {
+      var itemInfo = itemMap[item.item_name];
+      ctx.drawImage(
+        itemSprite,
+        itemInfo.x, itemInfo.y, itemInfo.w, itemInfo.h,
+        x, y, size, size
+      );
+      rendered = true;
+    }
+
+    // Fallback to letter rendering
+    if (!rendered) {
+      ctx.fillStyle = disp.color;
+      ctx.font = Math.floor(size * 0.3) + 'px ' + FONT;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(disp.letter, x + size / 2, y + size / 2);
+    }
+  }
+
   // ── Inventory ────────────────────────────────────────────────────
 
   function _drawInventory(ctx, vw, vh) {
@@ -470,12 +533,7 @@
         ctx.fillRect(sx + 1, sy + 1, ITEM_SLOT - 3, ITEM_SLOT - 3);
 
         if (item) {
-          var disp = ITEM_DISPLAY[item.item_name] || { letter: '?', color: '#aaaaaa', label: item.item_name };
-          ctx.fillStyle = disp.color;
-          ctx.font = '10px ' + FONT;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(disp.letter, sx + ITEM_SLOT / 2, sy + ITEM_SLOT / 2 - 2);
+          _drawItemIcon(ctx, item, sx + 2, sy + 2, ITEM_SLOT - 4);
 
           if (item.quantity > 1) {
             ctx.font = '4px ' + FONT;
@@ -495,7 +553,37 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillStyle = '#dddddd';
-      ctx.fillText(selDisp.label + (sel.item_type ? ' (' + sel.item_type + ')' : ''), vw / 2, oy + totalH + 4);
+
+      var isEquipped = player && player.equipment &&
+        (player.equipment.weapon === sel.item_name ||
+         player.equipment.armor === sel.item_name ||
+         player.equipment.shield === sel.item_name);
+
+      var actionHint = '';
+      if (isEquipped) {
+        actionHint = ' [EQUIPPED] Click to unequip';
+      } else if (selDisp.consumable) {
+        actionHint = ' - Click to USE';
+      } else if (selDisp.slot) {
+        actionHint = ' - Click to EQUIP';
+      }
+
+      ctx.fillText(selDisp.label + actionHint, vw / 2, oy + totalH + 4);
+    }
+
+    // Equipment summary at bottom
+    if (player && player.equipment) {
+      ctx.font = '3px ' + FONT;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#888888';
+      var eqY = oy + totalH + 14;
+      var eqX = ox;
+      var wName = player.equipment.weapon ? (ITEM_DISPLAY[player.equipment.weapon] || {}).label || player.equipment.weapon : 'None';
+      var aName = player.equipment.armor ? (ITEM_DISPLAY[player.equipment.armor] || {}).label || player.equipment.armor : 'None';
+      var sName = player.equipment.shield ? (ITEM_DISPLAY[player.equipment.shield] || {}).label || player.equipment.shield : 'None';
+      ctx.fillText('WPN: ' + wName, eqX, eqY);
+      ctx.fillText('ARM: ' + aName, eqX + 50, eqY);
+      ctx.fillText('SHD: ' + sName, eqX + 100, eqY);
     }
   }
 
@@ -503,11 +591,87 @@
     inventoryItems = items || [];
   }
 
+  function handleInventoryClick(mx, my, vw, vh) {
+    var totalW = INV_COLS * ITEM_SLOT;
+    var totalH = INV_ROWS * ITEM_SLOT;
+    var ox = (vw - totalW) / 2;
+    var oy = (vh - totalH) / 2;
+
+    for (var r = 0; r < INV_ROWS; r++) {
+      for (var c = 0; c < INV_COLS; c++) {
+        var idx = r * INV_COLS + c;
+        var sx = ox + c * ITEM_SLOT;
+        var sy = oy + r * ITEM_SLOT;
+
+        if (mx >= sx && mx <= sx + ITEM_SLOT && my >= sy && my <= sy + ITEM_SLOT) {
+          if (inventorySlot === idx && inventoryItems[idx]) {
+            _activateItem(idx);
+          } else {
+            inventorySlot = idx;
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  function _activateItem(idx) {
+    var item = inventoryItems[idx];
+    if (!item || !player) return;
+
+    var disp = ITEM_DISPLAY[item.item_name] || {};
+
+    if (disp.consumable) {
+      _useConsumable(item, idx);
+    } else if (disp.slot) {
+      _toggleEquip(item, disp.slot);
+    }
+  }
+
+  function _useConsumable(item, idx) {
+    if (item.item_name === 'health_potion') {
+      player.hp = Math.min(player.hp + 30, player.maxHp);
+      showNotification('+30 HP', '#44cc44');
+    } else if (item.item_name === 'mana_potion') {
+      player.mana = Math.min(player.mana + 25, player.maxMana);
+      showNotification('+25 Mana', '#4488ff');
+    }
+
+    item.quantity -= 1;
+    if (item.quantity <= 0) {
+      if (item.id && window.SupabaseHelper) {
+        window.SupabaseHelper.removeInventoryItem(item.id);
+      }
+      inventoryItems.splice(idx, 1);
+      inventorySlot = -1;
+    } else {
+      if (item.id && window.SupabaseHelper) {
+        window.SupabaseHelper.updateInventoryItem(item.id, { quantity: item.quantity });
+      }
+    }
+  }
+
+  function _toggleEquip(item, slot) {
+    if (!player.equipment) player.equipment = {};
+
+    if (player.equipment[slot] === item.item_name) {
+      player.equipment[slot] = null;
+      showNotification('Unequipped ' + ((ITEM_DISPLAY[item.item_name] || {}).label || item.item_name), '#aaaaaa');
+    } else {
+      player.equipment[slot] = item.item_name;
+      showNotification('Equipped ' + ((ITEM_DISPLAY[item.item_name] || {}).label || item.item_name), '#ccaa33');
+    }
+
+    if (window.SupabaseHelper) {
+      window.SupabaseHelper.updateCharacterStats(player.id, { equipment: player.equipment });
+    }
+  }
+
   // ── Character Sheet ──────────────────────────────────────────────
 
   function _drawCharSheet(ctx, vw, vh) {
     var panelW = 140;
-    var panelH = 120;
+    var panelH = 130;
     var ox = (vw - panelW) / 2;
     var oy = (vh - panelH) / 2;
 
@@ -525,6 +689,7 @@
 
     var lines = [
       (player.name || '???') + '  [' + (player.race || '?') + ']',
+      'Lv.' + (player.level || 1) + '   XP: ' + (player.xp || 0),
       'Class: ' + (player.currentClass || 'None') + (player.subclass ? ' / ' + player.subclass : ''),
       'Tier: ' + player.classTier + '   Alignment: ' + player.getAlignmentLabel(),
       '',
@@ -759,6 +924,28 @@
   function openPauseMenu()  { activeMenu = 'pause'; }
   function closeAllMenus()  { activeMenu = null; inventorySlot = -1; hoverSlot = -1; }
   function isMenuOpen()     { return activeMenu !== null; }
+  function getActiveMenu()  { return activeMenu; }
+
+  function handlePauseClick(mx, my, vw, vh) {
+    var resumeX = vw / 2 - 40, resumeY = vh / 2 - 2;
+    var signOutX = vw / 2 - 40, signOutY = vh / 2 + 18;
+    var btnW = 80, btnH = 14;
+
+    if (mx >= resumeX && mx <= resumeX + btnW && my >= resumeY && my <= resumeY + btnH) {
+      closeAllMenus();
+      return;
+    }
+    if (mx >= signOutX && mx <= signOutX + btnW && my >= signOutY && my <= signOutY + btnH) {
+      closeAllMenus();
+      if (window.SupabaseHelper && window.SupabaseHelper.signOut) {
+        window.SupabaseHelper.signOut().then(function () {
+          window.location.href = '/';
+        });
+      } else {
+        window.location.href = '/';
+      }
+    }
+  }
 
   // ── NPC Dialogue System ─────────────────────────────────────────
 
@@ -1419,5 +1606,8 @@
     isJailed:               function () { return jailState.active; },
     isNPCDialogueOpen:      function () { return npcDialogue.active; },
     loadInventoryItems:     loadInventoryItems,
+    getActiveMenu:          getActiveMenu,
+    handlePauseClick:       handlePauseClick,
+    handleInventoryClick:   handleInventoryClick,
   };
 })();
