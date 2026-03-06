@@ -206,7 +206,6 @@
     UI.initHUD(player);
     Chat.init(player);
     Combat.initCombat(player);
-    Enemies.init(player);
 
     SupabaseHelper.loadInventory(player.id).then(function (result) {
       if (result.data) {
@@ -216,6 +215,8 @@
 
     setLoadProgress(60, 'Loading sprites...');
     loadSprites(function () {
+      // Initialize enemies AFTER sprites are loaded
+      Enemies.init(player);
       setLoadProgress(100, 'Entering world...');
 
       var raceSpriteKey = player.race ? 'race_' + player.race.toLowerCase() : null;
